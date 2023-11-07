@@ -1,0 +1,6 @@
+[submodule "lib/pico_dvi"]
+	path = lib/pico_dvi
+	url = https://github.com/Wren6991/PicoDVI.git
+[submodule "lib/pico_sdk"]
+	path = lib/pico_sdk
+	url = https://github.com/raspberrypi/pico-sdk.git
