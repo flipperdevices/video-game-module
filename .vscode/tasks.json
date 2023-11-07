@@ -1,0 +1,32 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "CMake",
+            "type": "shell",
+            "command": "cd build && cmake ..",
+        },
+        {
+            "label": "Build",
+            "type": "shell",
+            "command": "cd build && make",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "dependsOn": "CMake"
+        },
+        {
+            "label": "Flash UF2",
+            "type": "shell",
+            "command": "cd build && make flash_uf2",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "dependsOn": "CMake"
+        },
+    ]
+}
