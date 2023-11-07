@@ -117,7 +117,15 @@ int main() {
 
     uart_puts(uart0, "Hello world!");
 
+    uint32_t counter = 0;
     while(1) {
+        counter = (counter + 1) % 1000;
+        if(counter == 0) {
+            gpio_put(LED_PIN, 0);
+        } else if(counter == 500) {
+            gpio_put(LED_PIN, 1);
+        }
+
         // fill frame with noise
         {
             uint8_t* data = (uint8_t*)noise.data;
@@ -126,8 +134,8 @@ int main() {
             }
         }
 
-        frame_parse_data(&start);
-        // frame_parse_data(&noise);
+        // frame_parse_data(&start);
+        frame_parse_data(&noise);
     }
 
     // while(1) {
