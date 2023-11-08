@@ -4,29 +4,39 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "CMake",
+            "label": "CMake Debug",
             "type": "shell",
-            "command": "cd build && cmake ..",
+            "command": "cd build && cmake -DCMAKE_BUILD_TYPE=Debug ..",
         },
         {
-            "label": "Build",
+            "label": "Build Debug",
             "type": "shell",
             "command": "cd build && make",
             "group": {
                 "kind": "build",
                 "isDefault": true
             },
-            "dependsOn": "CMake"
+            "dependsOn": "CMake Debug"
         },
         {
-            "label": "Flash UF2",
+            "label": "Flash UF2 Debug",
             "type": "shell",
             "command": "cd build && make flash_uf2",
             "group": {
                 "kind": "build",
                 "isDefault": true
             },
-            "dependsOn": "CMake"
+            "dependsOn": "CMake Debug"
+        },
+        {
+            "label": "Flash DAP Debug",
+            "type": "shell",
+            "command": "cd build && make flash_dap",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "dependsOn": "CMake Debug"
         },
     ]
 }

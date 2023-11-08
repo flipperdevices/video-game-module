@@ -107,8 +107,9 @@ uint32_t frame_get_voltage() {
     return VREG_VSEL;
 }
 
-void frame_parse_data(const frame_t* frame) {
-    mutex_enter_blocking(&my_mutex);
-    memcpy(&frame_next, frame, sizeof(frame_t));
-    mutex_exit(&my_mutex);
+void frame_parse_data(const frame_t* frame, uint32_t timeout_ms) {
+    if(mutex_enter_timeout_ms(&my_mutex, timeout_ms)) {
+        memcpy(&frame_next, frame, sizeof(frame_t));
+        mutex_exit(&my_mutex);
+    }
 }

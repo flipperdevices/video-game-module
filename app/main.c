@@ -3,19 +3,17 @@
 #include <pico/stdlib.h>
 #include <pico/multicore.h>
 #include <hardware/clocks.h>
-#include <hardware/gpio.h>
 #include <hardware/irq.h>
 #include <hardware/sync.h>
 #include <hardware/vreg.h>
 #include <pico/sem.h>
 #include "frame.h"
-
-#define LED_PIN 25
+#include "led.h"
+#include "uart.h"
 
 const frame_t start = {
     .data =
         {
-
             0xfe, 0x01, 0xfd, 0xfd, 0xfd, 0xfd, 0xfd, 0xfd, 0xfd, 0xfd, 0x55, 0x55, 0xfd, 0x01,
             0xff, 0xfe, 0xa8, 0xa8, 0xa8, 0xa8, 0xa8, 0xa8, 0xa8, 0xa8, 0xa8, 0xa8, 0xa8, 0xa8,
             0xa8, 0xa8, 0xa8, 0xa8, 0x88, 0xa8, 0x88, 0xa8, 0x88, 0xa8, 0x88, 0xa8, 0x88, 0x28,
@@ -96,37 +94,29 @@ const frame_t start = {
 
 frame_t noise = {0};
 
-int main() {
+void init() {
     vreg_set_voltage(frame_get_voltage());
     sleep_ms(10);
     set_sys_clock_khz(frame_get_clock(), true);
-
-    gpio_init(LED_PIN);
-    gpio_set_dir(LED_PIN, GPIO_OUT);
-    gpio_put(LED_PIN, 1);
-
     frame_init();
-    frame_parse_data(&start);
+    led_init();
+}
 
-    // Initialise UART 0
-    uart_init(uart0, 230400);
+#include <FreeRTOS.h>
+#include <task.h>
+#include <queue.h>
 
-    // Set the GPIO pin mux to the UART - 0 is TX, 1 is RX
-    gpio_set_function(0, GPIO_FUNC_UART);
-    gpio_set_function(1, GPIO_FUNC_UART);
-
-    uart_puts(uart0, "Hello world!");
-
-    uint32_t counter = 0;
+void led_task(void* unused_arg) {
     while(1) {
-        counter = (counter + 1) % 1000;
-        if(counter == 0) {
-            gpio_put(LED_PIN, 0);
-        } else if(counter == 500) {
-            gpio_put(LED_PIN, 1);
-        }
+        led_set(true);
+        vTaskDelay(pdMS_TO_TICKS(500));
+        led_set(false);
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
+}
 
-        // fill frame with noise
+void frame_task(void* unused_arg) {
+    while(1) {
         {
             uint8_t* data = (uint8_t*)noise.data;
             for(size_t i = 0; i < 1024; i++) {
@@ -134,9 +124,39 @@ int main() {
             }
         }
 
-        // frame_parse_data(&start);
-        frame_parse_data(&noise);
+        frame_parse_data(&noise, 1000);
+
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
+}
+
+void uart_task(void* unused_arg) {
+    uart_protocol_init(NULL, NULL);
+    while(true) {
+        vTaskDelay(pdMS_TO_TICKS(10000));
+    }
+}
+
+int main() {
+    init();
+
+    frame_parse_data(&start, 1000);
+
+    BaseType_t status;
+
+    TaskHandle_t led_task_handle = NULL;
+    status = xTaskCreate(led_task, "led_task", 128, NULL, 1, &led_task_handle);
+    assert(status == pdPASS);
+
+    TaskHandle_t frame_task_handle = NULL;
+    status = xTaskCreate(frame_task, "frame_task", 128, NULL, 1, &frame_task_handle);
+    assert(status == pdPASS);
+
+    TaskHandle_t uart_task_handle = NULL;
+    status = xTaskCreate(uart_task, "uart_task", 128, NULL, 1, &uart_task_handle);
+    assert(status == pdPASS);
+
+    vTaskStartScheduler();
 
     // while(1) {
     //     uint8_t c = uart_getc(uart0);
