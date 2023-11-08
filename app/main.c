@@ -113,21 +113,6 @@ void led_task(void* unused_arg) {
     }
 }
 
-void frame_task(void* unused_arg) {
-    while(1) {
-        {
-            uint8_t* data = (uint8_t*)noise.data;
-            for(size_t i = 0; i < 1024; i++) {
-                data[i] = rand() % 256;
-            }
-        }
-
-        frame_parse_data(&noise, 1000);
-
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
-}
-
 int main() {
     init();
 
@@ -139,38 +124,13 @@ int main() {
     status = xTaskCreate(led_task, "led_task", 128, NULL, 1, &led_task_handle);
     assert(status == pdPASS);
 
-    TaskHandle_t frame_task_handle = NULL;
-    status = xTaskCreate(frame_task, "frame_task", 128, NULL, 1, &frame_task_handle);
-    assert(status == pdPASS);
+    // TaskHandle_t frame_task_handle = NULL;
+    // status = xTaskCreate(frame_task, "frame_task", 128, NULL, 1, &frame_task_handle);
+    // assert(status == pdPASS);
 
     uart_protocol_init();
 
     vTaskStartScheduler();
-
-    // while(1) {
-    //     uint8_t c = uart_getc(uart0);
-    //     if(c == 1) {
-    //         c = uart_getc(uart0);
-    //         if(c == 2) {
-    //             c = uart_getc(uart0);
-    //             if(c == 3) {
-    //                 c = uart_getc(uart0);
-    //                 if(c == 4) {
-    //                     uart_read_blocking(uart0, data, 128 * 64 / 8);
-    //                     parse_data();
-    //                 } else {
-    //                     continue;
-    //                 }
-    //             } else {
-    //                 continue;
-    //             }
-    //         } else {
-    //             continue;
-    //         }
-    //     } else {
-    //         continue;
-    //     }
-    // }
 
     while(1) __wfe();
     __builtin_unreachable();

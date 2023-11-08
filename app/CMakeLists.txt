@@ -29,6 +29,9 @@ target_link_libraries(flipper_dvi
 # create map/bin/hex file etc.
 pico_add_extra_outputs(flipper_dvi)
 
+# disable stdio for uart
+pico_enable_stdio_uart(flipper_dvi 0)
+
 # add command to flash uf2 to board via cp
 add_custom_target(flash_uf2
 	COMMAND cp "${CMAKE_CURRENT_BINARY_DIR}/flipper_dvi.uf2" "/Volumes/RPI-RP2/flipper_dvi.uf2"

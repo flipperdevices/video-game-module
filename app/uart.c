@@ -15,12 +15,16 @@
 #include <FreeRTOS.h>
 #include <task.h>
 #include <queue.h>
+#include <stdlib.h>
+#include "frame.h"
 
 #define UART_ID uart0
 #define UART_IRQ UART0_IRQ
 #define UART_TX_PIN 0
 #define UART_RX_PIN 1
-#define UART_BAUD_RATE 115200
+#define UART_BAUD_RATE 921600
+
+const uint8_t magic[8] = {'D', 'A', 'T', 'A', '1', '3', '3', '7'};
 
 QueueHandle_t queue;
 
@@ -31,6 +35,58 @@ static void uart_on_rx() {
         BaseType_t pxHigherPriorityTaskWoken;
         xQueueSendFromISR(queue, &ch, &pxHigherPriorityTaskWoken);
         portYIELD_FROM_ISR(pxHigherPriorityTaskWoken);
+    }
+}
+
+uint8_t protocol_read() {
+    uint8_t ch = 0;
+    xQueueReceive(queue, &ch, portMAX_DELAY);
+    return ch;
+}
+
+static void protocol_wait_for_magic() {
+    for(int i = 0; i < 8; i++) {
+        uint8_t ch = protocol_read();
+        if(ch != magic[i]) {
+            i = -1;
+        }
+    }
+}
+
+static size_t protocol_read_size() {
+    union {
+        uint8_t size8[4];
+        size_t size;
+    } size;
+    for(size_t i = 0; i < sizeof(size_t); i++) {
+        size.size8[i] = protocol_read();
+    }
+    return size.size;
+}
+
+static void protocol_read_data(void* data, size_t size) {
+    uint8_t* data8 = (uint8_t*)data;
+    for(size_t i = 0; i < size; i++) {
+        data8[i] = protocol_read();
+    }
+}
+
+static void protocol_resp(void* data, size_t size) {
+    uint8_t* size8 = (uint8_t*)&size;
+    uart_write_blocking(UART_ID, magic, 8);
+    uart_write_blocking(UART_ID, size8, sizeof(size_t));
+    uart_write_blocking(UART_ID, data, size);
+}
+
+typedef enum {
+    CMD_FRAME = 0xAB,
+} protocol_cmd_t;
+
+static void protocol_parse_data(void* data, size_t size) {
+    uint8_t* data8 = (uint8_t*)data;
+    if(data8[0] == CMD_FRAME) {
+        frame_parse_data((frame_t*)&data8[1], 1000);
+        protocol_resp("OK", 2);
     }
 }
 
@@ -53,7 +109,7 @@ static void uart_task(void* unused_arg) {
     uart_set_fifo_enabled(UART_ID, false);
 
     // config uart for 8N1 transmission
-    uart_set_format(UART_ID, 8, UART_PARITY_NONE, 1);
+    uart_set_format(UART_ID, 8, 1, UART_PARITY_NONE);
 
     // disable hardware flow control
     uart_set_hw_flow(UART_ID, false, false);
@@ -66,9 +122,17 @@ static void uart_task(void* unused_arg) {
     uart_set_irq_enables(UART_ID, true, false);
 
     while(true) {
-        uint8_t ch = 0;
-        if(xQueueReceive(queue, &ch, portMAX_DELAY)) {
-            uart_write_blocking(UART_ID, &ch, 1);
+        protocol_wait_for_magic();
+        size_t size = protocol_read_size();
+        if(size <= 4096) {
+            void* data = malloc(size);
+            assert(data != NULL);
+            protocol_read_data(data, size);
+            protocol_parse_data(data, size);
+            protocol_resp(data, size);
+            free(data);
+        } else {
+            protocol_resp("SNAK", 4);
         }
     }
 }
