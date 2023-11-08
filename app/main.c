@@ -7,6 +7,8 @@
 #include <hardware/sync.h>
 #include <hardware/vreg.h>
 #include <pico/sem.h>
+#include <FreeRTOS.h>
+#include <task.h>
 #include "frame.h"
 #include "led.h"
 #include "uart.h"
@@ -102,10 +104,6 @@ void init() {
     led_init();
 }
 
-#include <FreeRTOS.h>
-#include <task.h>
-#include <queue.h>
-
 void led_task(void* unused_arg) {
     while(1) {
         led_set(true);
@@ -130,13 +128,6 @@ void frame_task(void* unused_arg) {
     }
 }
 
-void uart_task(void* unused_arg) {
-    uart_protocol_init(NULL, NULL);
-    while(true) {
-        vTaskDelay(pdMS_TO_TICKS(10000));
-    }
-}
-
 int main() {
     init();
 
@@ -152,9 +143,7 @@ int main() {
     status = xTaskCreate(frame_task, "frame_task", 128, NULL, 1, &frame_task_handle);
     assert(status == pdPASS);
 
-    TaskHandle_t uart_task_handle = NULL;
-    status = xTaskCreate(uart_task, "uart_task", 128, NULL, 1, &uart_task_handle);
-    assert(status == pdPASS);
+    uart_protocol_init();
 
     vTaskStartScheduler();
 
