@@ -13,11 +13,11 @@
             "servertype": "openocd",
             "device": "cmsis-dap",
             "rtos": "auto",
-            // "svdFile": "",
             "configFiles": [
                 "interface/cmsis-dap.cfg",
-                "target/rp2040.cfg",
+                "./.vscode/rp2040.cfg",
             ],
+            "svdFile": "./lib/pico_sdk/src/rp2040/hardware_regs/rp2040.svd",
         },
     ]
 }
