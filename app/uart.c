@@ -17,6 +17,7 @@
 #include <queue.h>
 #include <stdlib.h>
 #include "frame.h"
+#include "led.h"
 
 #define UART_ID uart0
 #define UART_IRQ UART0_IRQ
@@ -26,7 +27,7 @@
 
 const uint8_t magic[8] = {'D', 'A', 'T', 'A', '1', '3', '3', '7'};
 
-QueueHandle_t queue;
+static QueueHandle_t queue;
 
 // RX interrupt handler
 static void uart_on_rx() {
@@ -73,20 +74,33 @@ static void protocol_read_data(void* data, size_t size) {
 
 static void protocol_resp(void* data, size_t size) {
     uint8_t* size8 = (uint8_t*)&size;
+    led_blue(true);
     uart_write_blocking(UART_ID, magic, 8);
     uart_write_blocking(UART_ID, size8, sizeof(size_t));
     uart_write_blocking(UART_ID, data, size);
+    led_blue(false);
 }
 
 typedef enum {
     CMD_FRAME = 0xAB,
+    CMD_FRAME_COLOR = 0xBC,
 } protocol_cmd_t;
 
 static void protocol_parse_data(void* data, size_t size) {
     uint8_t* data8 = (uint8_t*)data;
-    if(data8[0] == CMD_FRAME) {
-        frame_parse_data((frame_t*)&data8[1], 1000);
+
+    switch(data8[0]) {
+    case CMD_FRAME:
+        frame_parse_data(data8[1], (frame_t*)&data8[2], 1000);
         protocol_resp("OK", 2);
+        break;
+    case CMD_FRAME_COLOR:
+        frame_set_color(data8[2] << 8 | data8[1], data8[4] << 8 | data8[3]);
+        protocol_resp("OK", 2);
+        break;
+
+    default:
+        break;
     }
 }
 
@@ -123,6 +137,7 @@ static void uart_task(void* unused_arg) {
 
     while(true) {
         protocol_wait_for_magic();
+
         size_t size = protocol_read_size();
         if(size <= 4096) {
             void* data = malloc(size);
@@ -137,8 +152,8 @@ static void uart_task(void* unused_arg) {
     }
 }
 
-void uart_protocol_init() {
+void uart_protocol_init(void) {
     TaskHandle_t uart_task_handle = NULL;
-    BaseType_t status = xTaskCreate(uart_task, "uart_task", 128, NULL, 1, &uart_task_handle);
+    BaseType_t status = xTaskCreate(uart_task, "uart_task", 1024, NULL, 1, &uart_task_handle);
     assert(status == pdPASS);
 }

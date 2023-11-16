@@ -1,6 +1,18 @@
 #pragma once
 #include <stdbool.h>
 
-void led_init();
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-void led_set(bool on);
+void led_init(void);
+
+void led_blue(bool on);
+
+void led_red(bool on);
+
+void led_disable(void);
+
+#ifdef __cplusplus
+}
+#endif

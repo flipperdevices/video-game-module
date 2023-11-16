@@ -3,7 +3,7 @@
 cmake_minimum_required(VERSION 3.12)
 
 # Copy code to ram on startup
-set(PICO_COPY_TO_RAM 1)
+# set(PICO_COPY_TO_RAM 1)
 set(PICO_SDK_PATH "${CMAKE_CURRENT_LIST_DIR}/lib/pico_sdk")
 set(PICO_DVI_PATH "${CMAKE_CURRENT_LIST_DIR}/lib/pico_dvi/software")
 include("${PICO_DVI_PATH}/pico_sdk_import.cmake")

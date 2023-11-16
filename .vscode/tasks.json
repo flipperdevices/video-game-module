@@ -11,7 +11,7 @@
         {
             "label": "Build Debug",
             "type": "shell",
-            "command": "cd build && make",
+            "command": "cd build && make -j12",
             "group": {
                 "kind": "build",
                 "isDefault": true
@@ -21,7 +21,7 @@
         {
             "label": "Flash UF2 Debug",
             "type": "shell",
-            "command": "cd build && make flash_uf2",
+            "command": "cd build && make flash_uf2 -j12",
             "group": {
                 "kind": "build",
                 "isDefault": true
@@ -31,7 +31,7 @@
         {
             "label": "Flash DAP Debug",
             "type": "shell",
-            "command": "cd build && make flash_dap",
+            "command": "cd build && make flash_dap -j12",
             "group": {
                 "kind": "build",
                 "isDefault": true
