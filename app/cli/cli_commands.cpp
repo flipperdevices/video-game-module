@@ -30,6 +30,8 @@ void cli_help(Cli* cli, std::string& args) {
             cli_write_eol(cli);
         }
     }
+
+    cli_write_eol(cli);
 }
 
 const CliItem cli_items[] = {
