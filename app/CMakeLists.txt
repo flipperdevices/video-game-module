@@ -7,6 +7,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 file(GLOB APP_SOURCES
     "*.c*"
 	"cli/*.c*"
+	"imu/*.c*"
 )
 
 add_executable(flipper_dvi
@@ -21,6 +22,7 @@ target_link_libraries(flipper_dvi
 	pico_stdlib
 	pico_multicore
 	pico_util
+	hardware_spi
 	libdvi
 	libsprite
 	FreeRTOS

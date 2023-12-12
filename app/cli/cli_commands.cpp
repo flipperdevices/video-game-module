@@ -3,6 +3,7 @@
 
 void cli_gpio(Cli* cli, std::string& args);
 void cli_device_info(Cli* cli, std::string& args);
+void cli_imu_test(Cli* cli, std::string& args);
 
 void cli_help(Cli* cli, std::string& args) {
     size_t max_len = 0;
@@ -56,6 +57,11 @@ const CliItem cli_items[] = {
         .name = "gpio",
         .desc = "gpio control",
         .callback = cli_gpio,
+    },
+    {
+        .name = "imu_test",
+        .desc = "test the IMU",
+        .callback = cli_imu_test,
     },
 };
 
