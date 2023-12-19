@@ -26,6 +26,7 @@ target_link_libraries(flipper_dvi
 	libdvi
 	libsprite
 	FreeRTOS
+	protobuf
 )
 
 # create map/bin/hex file etc.

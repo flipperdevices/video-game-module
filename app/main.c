@@ -126,6 +126,7 @@ int main() {
     TaskHandle_t led_task_handle = NULL;
     status = xTaskCreate(led_task, "led_task", 128, NULL, 1, &led_task_handle);
     assert(status == pdPASS);
+    (void)status;
 
     // TaskHandle_t frame_task_handle = NULL;
     // status = xTaskCreate(frame_task, "frame_task", 128, NULL, 1, &frame_task_handle);

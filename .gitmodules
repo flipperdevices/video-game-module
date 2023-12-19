@@ -7,3 +7,9 @@
 [submodule "lib/freertos_kernel"]
 	path = lib/freertos_kernel
 	url = https://github.com/FreeRTOS/FreeRTOS-Kernel.git
+[submodule "lib/nanopb"]
+	path = lib/nanopb
+	url = https://github.com/nanopb/nanopb.git
+[submodule "assets/flipperzero-protobuf"]
+	path = assets/flipperzero-protobuf
+	url = https://github.com/flipperdevices/flipperzero-protobuf.git
