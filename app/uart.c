@@ -17,14 +17,14 @@
 #include <queue.h>
 #include <stream_buffer.h>
 #include <stdlib.h>
-// #include "frame.h"
-// #include "led.h"
 
 #include <pb_common.h>
 #include <pb_encode.h>
 #include <pb_decode.h>
 #include <flipperzero-protobuf/flipper.pb.h>
 
+#include "frame.h"
+// #include "led.h"
 #include "expansion_protocol.h"
 
 #define UART_ID uart0
@@ -35,10 +35,8 @@
 #define UART_BAUD_RATE (230400UL)
 #define EXPANSION_TIMEOUT_MS (250UL)
 
-// const uint8_t magic[8] = {'D', 'A', 'T', 'A', '1', '3', '3', '7'};
-
 static StreamBufferHandle_t stream;
-// static PB_Main message;
+static PB_Main rpc_message;
 
 // RX interrupt handler
 static void uart_on_rx() {
@@ -49,71 +47,6 @@ static void uart_on_rx() {
         portYIELD_FROM_ISR(pxHigherPriorityTaskWoken);
     }
 }
-
-// uint8_t protocol_read() {
-//     uint8_t ch = 0;
-//     xQueueReceive(queue, &ch, portMAX_DELAY);
-//     return ch;
-// }
-
-// static void protocol_wait_for_magic() {
-//     for(int i = 0; i < 8; i++) {
-//         uint8_t ch = protocol_read();
-//         if(ch != magic[i]) {
-//             i = -1;
-//         }
-//     }
-// }
-//
-// static size_t protocol_read_size() {
-//     union {
-//         uint8_t size8[4];
-//         size_t size;
-//     } size;
-//     for(size_t i = 0; i < sizeof(size_t); i++) {
-//         size.size8[i] = protocol_read();
-//     }
-//     return size.size;
-// }
-//
-// static void protocol_read_data(void* data, size_t size) {
-//     uint8_t* data8 = (uint8_t*)data;
-//     for(size_t i = 0; i < size; i++) {
-//         data8[i] = protocol_read();
-//     }
-// }
-//
-// static void protocol_resp(void* data, size_t size) {
-//     uint8_t* size8 = (uint8_t*)&size;
-//     led_blue(true);
-//     uart_write_blocking(UART_ID, magic, 8);
-//     uart_write_blocking(UART_ID, size8, sizeof(size_t));
-//     uart_write_blocking(UART_ID, data, size);
-//     led_blue(false);
-// }
-//
-// typedef enum {
-//     CMD_FRAME = 0xAB,
-//     CMD_FRAME_COLOR = 0xBC,
-// } protocol_cmd_t;
-//
-// static void protocol_parse_data(void* data, size_t size) {
-//     uint8_t* data8 = (uint8_t*)data;
-//
-//     switch(data8[0]) {
-//     case CMD_FRAME:
-//         frame_parse_data(data8[1], (frame_t*)&data8[2], 1000);
-//         protocol_resp("OK", 2);
-//         break;
-//     case CMD_FRAME_COLOR:
-//         frame_set_color(data8[2] << 8 | data8[1], data8[4] << 8 | data8[3]);
-//         protocol_resp("OK", 2);
-//         break;
-//
-//     default:
-//         break;
-//     }
-// }
 
 // Receive frames
 static size_t expansion_receive_callback(uint8_t* data, size_t data_size, void* context) {
@@ -154,10 +87,19 @@ static inline bool expansion_send_frame(const ExpansionFrame* frame) {
     return expansion_frame_encode(frame, expansion_send_callback, NULL);
 }
 
-static inline bool expansion_send_heartbeat() {
+// static inline bool expansion_send_heartbeat() {
+//     ExpansionFrame frame = {
+//         .header.type = ExpansionFrameTypeHeartbeat,
+//         .content.heartbeat = {},
+//     };
+//
+//     return expansion_send_frame(&frame);
+// }
+
+static inline bool expansion_send_status(ExpansionFrameError error) {
     ExpansionFrame frame = {
-        .header.type = ExpansionFrameTypeHeartbeat,
-        .content.heartbeat = {},
+        .header.type = ExpansionFrameTypeStatus,
+        .content.status.error = error,
     };
 
     return expansion_send_frame(&frame);
@@ -180,6 +122,113 @@ static bool expansion_send_control_request(ExpansionFrameControlCommand command)
 
     return expansion_send_frame(&frame);
 }
+
+static bool expansion_send_data_request(const uint8_t* data, size_t data_size) {
+    ExpansionFrame frame = {
+        .header.type = ExpansionFrameTypeData,
+        .content.data.size = data_size,
+    };
+
+    memcpy(frame.content.data.bytes, data, data_size);
+    return expansion_send_frame(&frame);
+}
+
+// Rpc functions
+
+typedef struct {
+    ExpansionFrame frame;
+    size_t read_size; // Number of bytes already read from the data frame
+} ExpansionRpcContext;
+
+// TODO: Refactor this function
+static bool expansion_rpc_decode_callback(
+    pb_istream_t* stream,
+    pb_byte_t* data,
+    size_t data_size) {
+    ExpansionRpcContext* ctx = stream->state;
+    size_t received_size = 0;
+
+    while(received_size != data_size) {
+        if(ctx->frame.content.data.size - ctx->read_size == 0) {
+            // No data left to read from the current data frame, receive the next one
+            if(!expansion_receive_frame(&ctx->frame)) break;
+            if(ctx->frame.header.type == ExpansionFrameTypeData) {
+                ctx->read_size = 0;
+            } else {
+                expansion_send_status(ExpansionFrameErrorUnknown);
+                break;
+            }
+        }
+
+        const size_t current_size = MIN(data_size - received_size, ctx->frame.content.data.size - ctx->read_size);
+        memcpy(data + received_size, ctx->frame.content.data.bytes + ctx->read_size, current_size);
+
+        ctx->read_size += current_size;
+
+        if(ctx->frame.content.data.size - ctx->read_size == 0) {
+            // Confirm the frame
+            if(!expansion_send_status(ExpansionFrameErrorNone)) break;
+        }
+
+        received_size += current_size;
+    }
+
+    return (received_size == data_size);
+}
+
+static bool expansion_receive_rpc_message(PB_Main* message) {
+    ExpansionRpcContext ctx = {};
+
+    pb_istream_t is = {
+        .callback = expansion_rpc_decode_callback,
+        .state = &ctx,
+        .bytes_left = SIZE_MAX,
+        .errmsg = NULL,
+    };
+
+    return pb_decode_ex(&is, &PB_Main_msg, message, PB_DECODE_DELIMITED);
+}
+
+static bool expansion_rpc_encode_callback(
+    pb_ostream_t* stream,
+    const pb_byte_t* data,
+    size_t data_size) {
+    size_t sent_size = 0;
+
+    while(sent_size != data_size) {
+        const size_t current_size = MIN(data_size - sent_size, EXPANSION_MAX_DATA_SIZE);
+        if(!expansion_send_data_request(data + sent_size, current_size)) break;
+
+        ExpansionFrame rx_frame;
+        if(!expansion_receive_frame(&rx_frame)) break;
+        if(!expansion_is_success_frame(&rx_frame)) break;
+
+        sent_size += current_size;
+    }
+
+    return (sent_size == data_size);
+}
+
+static bool expansion_send_rpc_message(PB_Main* message) {
+    pb_ostream_t os = {
+        .callback = expansion_rpc_encode_callback,
+        .state = NULL,
+        .max_size = SIZE_MAX,
+        .bytes_written = 0,
+        .errmsg = NULL,
+    };
+
+    const bool success = pb_encode_ex(&os, &PB_Main_msg, message, PB_ENCODE_DELIMITED);
+    pb_release(&PB_Main_msg, message);
+    return success;
+}
+
+static inline bool expansion_is_success_rpc_response(const PB_Main* message) {
+    return message->command_status == PB_CommandStatus_OK &&
+           message->which_content == PB_Main_empty_tag;
+}
+
+// Main states
 
 static bool expansion_wait_ready() {
     bool success = false;
@@ -223,16 +272,49 @@ static bool expansion_start_rpc() {
     return success;
 }
 
-static bool expansion_idle() {
+// static void expansion_idle() {
+//     while(true) {
+//         if(!expansion_send_heartbeat()) break;
+//         ExpansionFrame frame;
+//         if(!expansion_receive_frame(&frame)) break;
+//         if(!expansion_is_heartbeat_frame(&frame)) break;
+//         vTaskDelay(EXPANSION_TIMEOUT_MS - 50);
+//     }
+// }
+
+static bool expansion_start_screen_streaming() {
+    bool success = false;
+
+    rpc_message.command_id++;
+    rpc_message.command_status = PB_CommandStatus_OK;
+    rpc_message.which_content = PB_Main_gui_start_screen_stream_request_tag;
+    rpc_message.has_next = false;
+
+    do {
+        if(!expansion_send_rpc_message(&rpc_message)) break;
+        if(!expansion_receive_rpc_message(&rpc_message)) break;
+        if(!expansion_is_success_rpc_response(&rpc_message)) break;
+        success = true;
+    } while(false);
+
+    pb_release(&PB_Main_msg, &rpc_message);
+    return success;
+}
+
+static void expansion_process_screen_streaming() {
     while(true) {
-        if(!expansion_send_heartbeat()) break;
-        ExpansionFrame frame;
-        if(!expansion_receive_frame(&frame)) break;
-        if(!expansion_is_heartbeat_frame(&frame)) break;
-        vTaskDelay(EXPANSION_TIMEOUT_MS - 50);
+        if(!expansion_receive_rpc_message(&rpc_message)) break;
+        if(rpc_message.which_content != PB_Main_gui_screen_frame_tag) break;
+
+        // Display frame
+        const PB_Gui_ScreenOrientation orientation = rpc_message.content.gui_screen_frame.orientation;
+        const pb_byte_t* data = rpc_message.content.gui_screen_frame.data->bytes;
+
+        frame_parse_data(orientation, (const frame_t*)data, EXPANSION_TIMEOUT_MS / 2UL);
+        pb_release(&PB_Main_msg, &rpc_message);
     }
 
-    return false;
+    pb_release(&PB_Main_msg, &rpc_message);
 }
 
 static void uart_task(void* unused_arg) {
@@ -280,30 +362,16 @@ static void uart_task(void* unused_arg) {
         if(!expansion_handshake()) continue;
         // start rpc
         if(!expansion_start_rpc()) continue;
-        // test: maintain connection
-        if(!expansion_idle()) continue;
+        // start screen streaming
+        if(!expansion_start_screen_streaming()) continue;
+        // process screen frame messages - returns only on error
+        expansion_process_screen_streaming();
     }
-
-    // while(true) {
-    //     protocol_wait_for_magic();
-    //
-    //     size_t size = protocol_read_size();
-    //     if(size <= 4096) {
-    //         void* data = malloc(size);
-    //         assert(data != NULL);
-    //         protocol_read_data(data, size);
-    //         protocol_parse_data(data, size);
-    //         protocol_resp(data, size);
-    //         free(data);
-    //     } else {
-    //         protocol_resp("SNAK", 4);
-    //     }
-    // }
 }
 
 void uart_protocol_init(void) {
     TaskHandle_t uart_task_handle = NULL;
-    BaseType_t status = xTaskCreate(uart_task, "uart_task", 1024, NULL, 1, &uart_task_handle);
+    BaseType_t status = xTaskCreate(uart_task, "uart_task", 4 * 1024, NULL, 1, &uart_task_handle);
     assert(status == pdPASS);
     (void)status;
 }
