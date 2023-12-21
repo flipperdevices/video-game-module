@@ -33,7 +33,7 @@
 #define UART_RX_PIN 1
 #define UART_INIT_BAUD_RATE (9600UL)
 #define UART_BAUD_RATE (230400UL)
-#define EXPANSION_TIMEOUT_MS (250UL)
+#define EXPANSION_TIMEOUT_MS (200UL) // Slightly less than on the host
 
 static StreamBufferHandle_t stream;
 static PB_Main rpc_message;
@@ -53,7 +53,11 @@ static size_t expansion_receive_callback(uint8_t* data, size_t data_size, void* 
     size_t received_size = 0;
 
     while(true) {
-        const size_t received_size_cur = xStreamBufferReceive(stream, data + received_size, data_size - received_size, EXPANSION_TIMEOUT_MS);
+        const size_t received_size_cur = xStreamBufferReceive(
+            stream,
+            data + received_size,
+            data_size - received_size,
+            pdMS_TO_TICKS(EXPANSION_TIMEOUT_MS));
         if(received_size_cur == 0) break;
         received_size += received_size_cur;
         if(received_size == data_size) break;
@@ -87,14 +91,14 @@ static inline bool expansion_send_frame(const ExpansionFrame* frame) {
     return expansion_frame_encode(frame, expansion_send_callback, NULL);
 }
 
-// static inline bool expansion_send_heartbeat() {
-//     ExpansionFrame frame = {
-//         .header.type = ExpansionFrameTypeHeartbeat,
-//         .content.heartbeat = {},
-//     };
-//
-//     return expansion_send_frame(&frame);
-// }
+static inline bool expansion_send_heartbeat() {
+    ExpansionFrame frame = {
+        .header.type = ExpansionFrameTypeHeartbeat,
+        .content.heartbeat = {},
+    };
+
+    return expansion_send_frame(&frame);
+}
 
 static inline bool expansion_send_status(ExpansionFrameError error) {
     ExpansionFrame frame = {
@@ -141,18 +145,22 @@ typedef struct {
 } ExpansionRpcContext;
 
 // TODO: Refactor this function
-static bool expansion_rpc_decode_callback(
-    pb_istream_t* stream,
-    pb_byte_t* data,
-    size_t data_size) {
+static bool
+    expansion_rpc_decode_callback(pb_istream_t* stream, pb_byte_t* data, size_t data_size) {
     ExpansionRpcContext* ctx = stream->state;
     size_t received_size = 0;
 
     while(received_size != data_size) {
+        // No data left to read from the current data frame, receive the next one
         if(ctx->frame.content.data.size - ctx->read_size == 0) {
-            // No data left to read from the current data frame, receive the next one
-            if(!expansion_receive_frame(&ctx->frame)) break;
-            if(ctx->frame.header.type == ExpansionFrameTypeData) {
+            if(!expansion_receive_frame(&ctx->frame)) {
+                // No frame has been received in a while, send a heartbeat
+                if(!expansion_send_heartbeat()) break;
+                continue;
+            }
+            if(ctx->frame.header.type == ExpansionFrameTypeHeartbeat) {
+                continue;
+            } else if(ctx->frame.header.type == ExpansionFrameTypeData) {
                 ctx->read_size = 0;
             } else {
                 expansion_send_status(ExpansionFrameErrorUnknown);
@@ -160,7 +168,8 @@ static bool expansion_rpc_decode_callback(
             }
         }
 
-        const size_t current_size = MIN(data_size - received_size, ctx->frame.content.data.size - ctx->read_size);
+        const size_t current_size =
+            MIN(data_size - received_size, ctx->frame.content.data.size - ctx->read_size);
         memcpy(data + received_size, ctx->frame.content.data.bytes + ctx->read_size, current_size);
 
         ctx->read_size += current_size;
@@ -189,10 +198,8 @@ static bool expansion_receive_rpc_message(PB_Main* message) {
     return pb_decode_ex(&is, &PB_Main_msg, message, PB_DECODE_DELIMITED);
 }
 
-static bool expansion_rpc_encode_callback(
-    pb_ostream_t* stream,
-    const pb_byte_t* data,
-    size_t data_size) {
+static bool
+    expansion_rpc_encode_callback(pb_ostream_t* stream, const pb_byte_t* data, size_t data_size) {
     size_t sent_size = 0;
 
     while(sent_size != data_size) {
@@ -272,16 +279,6 @@ static bool expansion_start_rpc() {
     return success;
 }
 
-// static void expansion_idle() {
-//     while(true) {
-//         if(!expansion_send_heartbeat()) break;
-//         ExpansionFrame frame;
-//         if(!expansion_receive_frame(&frame)) break;
-//         if(!expansion_is_heartbeat_frame(&frame)) break;
-//         vTaskDelay(EXPANSION_TIMEOUT_MS - 50);
-//     }
-// }
-
 static bool expansion_start_screen_streaming() {
     bool success = false;
 
@@ -307,10 +304,12 @@ static void expansion_process_screen_streaming() {
         if(rpc_message.which_content != PB_Main_gui_screen_frame_tag) break;
 
         // Display frame
-        const PB_Gui_ScreenOrientation orientation = rpc_message.content.gui_screen_frame.orientation;
+        const PB_Gui_ScreenOrientation orientation =
+            rpc_message.content.gui_screen_frame.orientation;
         const pb_byte_t* data = rpc_message.content.gui_screen_frame.data->bytes;
 
-        frame_parse_data(orientation, (const frame_t*)data, EXPANSION_TIMEOUT_MS / 2UL);
+        frame_parse_data(
+            orientation, (const frame_t*)data, pdMS_TO_TICKS(EXPANSION_TIMEOUT_MS / 2UL));
         pb_release(&PB_Main_msg, &rpc_message);
     }
 
@@ -320,7 +319,7 @@ static void expansion_process_screen_streaming() {
 static void uart_task(void* unused_arg) {
     // init stream buffer
     stream = xStreamBufferCreate(sizeof(ExpansionFrame), 1);
-    assert(buf != NULL);
+    assert(stream != NULL);
 
     // init uart 0
     uart_init(uart0, UART_INIT_BAUD_RATE);
@@ -356,7 +355,7 @@ static void uart_task(void* unused_arg) {
         // announce presence
         uart_putc_raw(UART_ID, 0xaa);
 
-        // wait for flipper response
+        // wait for host response
         if(!expansion_wait_ready()) continue;
         // negotiate baud rate
         if(!expansion_handshake()) continue;
