@@ -32,8 +32,11 @@
 #define UART_TX_PIN 0
 #define UART_RX_PIN 1
 #define UART_INIT_BAUD_RATE (9600UL)
-#define UART_BAUD_RATE (230400UL)
-#define EXPANSION_TIMEOUT_MS (200UL) // Slightly less than on the host
+#define UART_BAUD_RATE (921600UL)
+
+#define EXPANSION_TIMEOUT_MS (250UL)
+#define EXPANSION_MODULE_TIMEOUT_MS (EXPANSION_TIMEOUT_MS - 50UL)
+#define EXPANSION_MODULE_SPEED_SWITCH_DELAY_MS (25UL)
 
 static StreamBufferHandle_t stream;
 static PB_Main rpc_message;
@@ -57,7 +60,7 @@ static size_t expansion_receive_callback(uint8_t* data, size_t data_size, void* 
             stream,
             data + received_size,
             data_size - received_size,
-            pdMS_TO_TICKS(EXPANSION_TIMEOUT_MS));
+            pdMS_TO_TICKS(EXPANSION_MODULE_TIMEOUT_MS));
         if(received_size_cur == 0) break;
         received_size += received_size_cur;
         if(received_size == data_size) break;
@@ -259,6 +262,7 @@ static bool expansion_handshake() {
         if(!expansion_receive_frame(&frame)) break;
         if(!expansion_is_success_frame(&frame)) break;
         uart_set_baudrate(UART_ID, UART_BAUD_RATE);
+        vTaskDelay(pdMS_TO_TICKS(EXPANSION_MODULE_SPEED_SWITCH_DELAY_MS));
         success = true;
     } while(false);
 
@@ -309,7 +313,7 @@ static void expansion_process_screen_streaming() {
         const pb_byte_t* data = rpc_message.content.gui_screen_frame.data->bytes;
 
         frame_parse_data(
-            orientation, (const frame_t*)data, pdMS_TO_TICKS(EXPANSION_TIMEOUT_MS / 2UL));
+            orientation, (const frame_t*)data, pdMS_TO_TICKS(EXPANSION_MODULE_TIMEOUT_MS));
         pb_release(&PB_Main_msg, &rpc_message);
     }
 
@@ -348,10 +352,10 @@ static void uart_task(void* unused_arg) {
     uart_set_irq_enables(UART_ID, true, false);
 
     while(true) {
-        // arbitrary delay just in case
-        vTaskDelay(50);
         // reset baud rate to initial value
         uart_set_baudrate(UART_ID, UART_INIT_BAUD_RATE);
+        // wait before (re)trying to connect
+        vTaskDelay(pdMS_TO_TICKS(EXPANSION_TIMEOUT_MS));
         // announce presence
         uart_putc_raw(UART_ID, 0xaa);
 
