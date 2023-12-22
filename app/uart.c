@@ -1,20 +1,9 @@
 #include "uart.h"
 #include <pico/stdlib.h>
 
-// #include <stdio.h>
-// #include <stdlib.h>
-// #include <pico/multicore.h>
-// #include <hardware/clocks.h>
-// #include <hardware/gpio.h>
-// #include <hardware/irq.h>
-// #include <hardware/sync.h>
-// #include <hardware/vreg.h>
-// #include <pico/sem.h>
-
 #include <hardware/gpio.h>
 #include <FreeRTOS.h>
 #include <task.h>
-#include <queue.h>
 #include <stream_buffer.h>
 #include <stdlib.h>
 
@@ -24,7 +13,6 @@
 #include <flipperzero-protobuf/flipper.pb.h>
 
 #include "frame.h"
-// #include "led.h"
 #include "expansion_protocol.h"
 
 #define UART_ID uart0
@@ -145,28 +133,45 @@ typedef struct {
     size_t read_size; // Number of bytes already read from the data frame
 } ExpansionRpcContext;
 
-// TODO: Refactor this function
+static inline bool expansion_rpc_is_read_complete(const ExpansionRpcContext* ctx) {
+    return ctx->frame.content.data.size == ctx->read_size;
+}
+
+// Read the next frame, process heartbeat if necessary
+static inline bool expansion_rpc_read_next_frame(ExpansionRpcContext* ctx) {
+    while(true) {
+        // If no frame has been received in a while, send a heartbeat
+        if(!expansion_receive_frame(&ctx->frame)) {
+            if(!expansion_send_heartbeat()) {
+                return false;
+            } else {
+                continue;
+            }
+        }
+
+        switch(ctx->frame.header.type) {
+        case ExpansionFrameTypeHeartbeat:
+            // No action needed
+            break;
+        case ExpansionFrameTypeData:
+            ctx->read_size = 0;
+            return true;
+        default:
+            expansion_send_status(ExpansionFrameErrorUnknown);
+            return false;
+        }
+    }
+}
+
 static bool
     expansion_rpc_decode_callback(pb_istream_t* stream, pb_byte_t* data, size_t data_size) {
     ExpansionRpcContext* ctx = stream->state;
     size_t received_size = 0;
 
     while(received_size != data_size) {
-        // No data left to read from the current data frame, receive the next one
-        if(ctx->frame.content.data.size - ctx->read_size == 0) {
-            if(!expansion_receive_frame(&ctx->frame)) {
-                // No frame has been received in a while, send a heartbeat
-                if(!expansion_send_heartbeat()) break;
-                continue;
-            }
-            if(ctx->frame.header.type == ExpansionFrameTypeHeartbeat) {
-                continue;
-            } else if(ctx->frame.header.type == ExpansionFrameTypeData) {
-                ctx->read_size = 0;
-            } else {
-                expansion_send_status(ExpansionFrameErrorUnknown);
-                break;
-            }
+        if(expansion_rpc_is_read_complete(ctx)) {
+            // Read next frame
+            if(!expansion_rpc_read_next_frame(ctx)) break;
         }
 
         const size_t current_size =
@@ -175,7 +180,7 @@ static bool
 
         ctx->read_size += current_size;
 
-        if(ctx->frame.content.data.size - ctx->read_size == 0) {
+        if(expansion_rpc_is_read_complete(ctx)) {
             // Confirm the frame
             if(!expansion_send_status(ExpansionFrameErrorNone)) break;
         }
