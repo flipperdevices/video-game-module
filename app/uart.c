@@ -140,19 +140,20 @@ static inline bool expansion_rpc_is_read_complete(const ExpansionRpcContext* ctx
 
 // Read the next frame, process heartbeat if necessary
 static inline bool expansion_rpc_read_next_frame(ExpansionRpcContext* ctx) {
-    while(true) {
+    for(bool heartbeat_pending = false;;) {
         // If no frame has been received in a while, send a heartbeat
         if(!expansion_receive_frame(&ctx->frame)) {
-            if(!expansion_send_heartbeat()) {
+            if(heartbeat_pending || !expansion_send_heartbeat()) {
                 return false;
             } else {
+                heartbeat_pending = true;
                 continue;
             }
         }
 
         switch(ctx->frame.header.type) {
         case ExpansionFrameTypeHeartbeat:
-            // No action needed
+            heartbeat_pending = false;
             break;
         case ExpansionFrameTypeData:
             ctx->read_size = 0;
