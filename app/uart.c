@@ -23,6 +23,7 @@
 #define UART_BAUD_RATE (921600UL)
 
 #define EXPANSION_MODULE_TIMEOUT_MS (EXPANSION_PROTOCOL_TIMEOUT_MS - 50UL)
+#define EXPANSION_MODULE_STARTUP_DELAY_MS (250UL)
 
 static StreamBufferHandle_t stream;
 static PB_Main rpc_message;
@@ -324,6 +325,8 @@ static void expansion_process_screen_streaming() {
 }
 
 static void uart_task(void* unused_arg) {
+    // startup delay (skip potential module insertion interference)
+    vTaskDelay(pdMS_TO_TICKS(EXPANSION_MODULE_STARTUP_DELAY_MS));
     // init stream buffer
     stream = xStreamBufferCreate(sizeof(ExpansionFrame), 1);
     assert(stream != NULL);
@@ -357,8 +360,8 @@ static void uart_task(void* unused_arg) {
     while(true) {
         // reset baud rate to initial value
         uart_set_baudrate(UART_ID, UART_INIT_BAUD_RATE);
-        // announce presence
-        uart_putc_raw(UART_ID, 0xaa);
+        // announce presence (one pulse high -> low)
+        uart_putc_raw(UART_ID, 0xF0);
 
         // wait for host response
         if(!expansion_wait_ready()) continue;
