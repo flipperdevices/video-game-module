@@ -97,9 +97,12 @@ static const frame_t start = {
 frame_t noise = {0};
 
 void init() {
+    sleep_ms(10);
     vreg_set_voltage(frame_get_voltage());
+
     sleep_ms(10);
     set_sys_clock_khz(frame_get_clock(), true);
+    
     stdio_init_all();
     frame_init();
     led_init();
@@ -126,6 +129,7 @@ int main() {
     TaskHandle_t led_task_handle = NULL;
     status = xTaskCreate(led_task, "led_task", 128, NULL, 1, &led_task_handle);
     assert(status == pdPASS);
+    (void)status;
 
     // TaskHandle_t frame_task_handle = NULL;
     // status = xTaskCreate(frame_task, "frame_task", 128, NULL, 1, &frame_task_handle);

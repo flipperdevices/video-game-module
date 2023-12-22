@@ -26,7 +26,11 @@ target_link_libraries(flipper_dvi
 	libdvi
 	libsprite
 	FreeRTOS
+	protobuf
 )
+
+# Increase XOSC startup delay to improve boot reliability
+add_definitions(-DPICO_XOSC_STARTUP_DELAY_MULTIPLIER=64)
 
 # create map/bin/hex file etc.
 pico_add_extra_outputs(flipper_dvi)

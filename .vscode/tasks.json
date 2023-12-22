@@ -19,6 +19,21 @@
             "dependsOn": "CMake Debug"
         },
         {
+            "label": "CMake Release",
+            "type": "shell",
+            "command": "cd build && cmake -DCMAKE_BUILD_TYPE=Release ..",
+        },
+        {
+            "label": "Build Release",
+            "type": "shell",
+            "command": "cd build && make -j12",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "dependsOn": "CMake Release"
+        },
+        {
             "label": "Flash UF2 Debug",
             "type": "shell",
             "command": "cd build && make flash_uf2 -j12",

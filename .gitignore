@@ -33,3 +33,10 @@
 
 # build folder
 build/
+
+# Clangd
+.cache
+
+# KDE stuff
+.directory
+.kateproject

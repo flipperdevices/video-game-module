@@ -15,7 +15,26 @@ pico_sdk_init()
 
 add_compile_options(-Wall)
 
+# Protobuf assets
+set(ASSETS_PATH "${CMAKE_CURRENT_LIST_DIR}/assets")
+set(PROTOBUF_ASSETS_DIR "${ASSETS_PATH}/flipperzero-protobuf")
+file(GLOB PROTOBUF_ASSETS_PROTO_FILES "${PROTOBUF_ASSETS_DIR}/*.proto")
 
+# Nanopb
+set(NANOPB_SUBMODULE_DIR "${CMAKE_CURRENT_LIST_DIR}/lib/nanopb")
+list(APPEND CMAKE_MODULE_PATH "${NANOPB_SUBMODULE_DIR}/extra")
+find_package(Nanopb REQUIRED)
+
+nanopb_generate_cpp(PROTOBUF_SOURCES PROTOBUF_HEADERS RELPATH ${ASSETS_PATH} ${PROTOBUF_ASSETS_PROTO_FILES})
+
+# Add nanopb and generated files as a library
+add_library(protobuf STATIC ${PROTOBUF_SOURCES} ${PROTOBUF_HEADERS})
+
+target_include_directories(protobuf PUBLIC "${NANOPB_INCLUDE_DIRS}")
+target_include_directories(protobuf PUBLIC "${CMAKE_CURRENT_BINARY_DIR}")
+target_compile_definitions(protobuf PUBLIC PB_ENABLE_MALLOC)
+
+# FreeRTOS
 set(FREERTOS_CFG_DIRECTORY "${CMAKE_SOURCE_DIR}/config")
 set(FREERTOS_SRC_DIRECTORY "${CMAKE_SOURCE_DIR}/lib/freertos_kernel")
 
