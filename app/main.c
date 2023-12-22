@@ -97,9 +97,12 @@ static const frame_t start = {
 frame_t noise = {0};
 
 void init() {
+    sleep_ms(10);
     vreg_set_voltage(frame_get_voltage());
+
     sleep_ms(10);
     set_sys_clock_khz(frame_get_clock(), true);
+    
     stdio_init_all();
     frame_init();
     led_init();
