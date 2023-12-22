@@ -34,9 +34,7 @@
 #define UART_INIT_BAUD_RATE (9600UL)
 #define UART_BAUD_RATE (921600UL)
 
-#define EXPANSION_TIMEOUT_MS (250UL)
-#define EXPANSION_MODULE_TIMEOUT_MS (EXPANSION_TIMEOUT_MS - 50UL)
-#define EXPANSION_MODULE_SPEED_SWITCH_DELAY_MS (25UL)
+#define EXPANSION_MODULE_TIMEOUT_MS (EXPANSION_PROTOCOL_TIMEOUT_MS - 50UL)
 
 static StreamBufferHandle_t stream;
 static PB_Main rpc_message;
@@ -206,7 +204,7 @@ static bool
     size_t sent_size = 0;
 
     while(sent_size != data_size) {
-        const size_t current_size = MIN(data_size - sent_size, EXPANSION_MAX_DATA_SIZE);
+        const size_t current_size = MIN(data_size - sent_size, EXPANSION_PROTOCOL_MAX_DATA_SIZE);
         if(!expansion_send_data_request(data + sent_size, current_size)) break;
 
         ExpansionFrame rx_frame;
@@ -262,7 +260,7 @@ static bool expansion_handshake() {
         if(!expansion_receive_frame(&frame)) break;
         if(!expansion_is_success_frame(&frame)) break;
         uart_set_baudrate(UART_ID, UART_BAUD_RATE);
-        vTaskDelay(pdMS_TO_TICKS(EXPANSION_MODULE_SPEED_SWITCH_DELAY_MS));
+        vTaskDelay(pdMS_TO_TICKS(EXPANSION_PROTOCOL_BAUD_CHANGE_DT_MS));
         success = true;
     } while(false);
 
@@ -354,8 +352,6 @@ static void uart_task(void* unused_arg) {
     while(true) {
         // reset baud rate to initial value
         uart_set_baudrate(UART_ID, UART_INIT_BAUD_RATE);
-        // wait before (re)trying to connect
-        vTaskDelay(pdMS_TO_TICKS(EXPANSION_TIMEOUT_MS));
         // announce presence
         uart_putc_raw(UART_ID, 0xaa);
 
