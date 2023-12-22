@@ -271,7 +271,7 @@ static bool run_gyro_self_test(ICM42688P& imu, int32_t* st_bias, Cli* cli) {
         /* compare the Self-Test response to the ST absolute limits */
         for(uint8_t i = 0; i < 3; i++) {
             if(selftest_response[i] < (MIN_ST_GYRO_DPS * 32768 / 250)) {
-                cli_printf(cli, "ST resp limits" EOL);
+                cli_printf(cli, "Gyro selftest error: limits" EOL);
                 result = false;
             }
         }
@@ -280,12 +280,12 @@ static bool run_gyro_self_test(ICM42688P& imu, int32_t* st_bias, Cli* cli) {
         for(uint8_t i = 0; i < 3; i++) {
             selftest_otp[i] = INV_ST_OTP_EQUATION(GyroFullScale250DPS, selftest_data[i]);
             if(selftest_otp[i] == 0) {
-                cli_printf(cli, "ST resp otp 0" EOL);
+                cli_printf(cli, "Gyro selftest error: otp 0" EOL);
                 result = false;
             } else {
                 float ratio = ((float)selftest_response[i]) / ((float)selftest_otp[i]);
                 if((ratio >= MAX_RATIO) || (ratio <= MIN_RATIO)) {
-                    cli_printf(cli, "ST resp otp ratio" EOL);
+                    cli_printf(cli, "Gyro selftest error: otp ratio" EOL);
                     result = false;
                 }
             }
@@ -296,7 +296,7 @@ static bool run_gyro_self_test(ICM42688P& imu, int32_t* st_bias, Cli* cli) {
     for(uint8_t i = 0; i < 3; i++) {
         if((abs(values_normal[i]) > (int32_t)(MAX_ST_GYRO_OFFSET_DPS * 32768 / 250))) {
             result = false;
-            cli_printf(cli, "ST resp bias" EOL);
+            cli_printf(cli, "Gyro selftest error: bias" EOL);
         }
 
         st_bias[i] = values_normal[i];
@@ -346,7 +346,7 @@ static bool run_accel_self_test(ICM42688P& imu, int32_t* st_bias, Cli* cli) {
         for(uint8_t i = 0; i < 3; i++) {
             if((selftest_response[i] < ((MIN_ST_ACCEL_MG * accel_sensitivity_1g) / 1000)) ||
                (selftest_response[i] > ((MAX_ST_ACCEL_MG * accel_sensitivity_1g) / 1000))) {
-                cli_printf(cli, "ST resp limits" EOL);
+                cli_printf(cli, "Accel selftest error: limits" EOL);
                 result = false;
             }
         }
@@ -355,12 +355,12 @@ static bool run_accel_self_test(ICM42688P& imu, int32_t* st_bias, Cli* cli) {
         for(uint8_t i = 0; i < 3; i++) {
             selftest_otp[i] = INV_ST_OTP_EQUATION(AccelFullScale2G, selftest_data[i]);
             if(selftest_otp[i] == 0) {
-                cli_printf(cli, "ST resp otp 0" EOL);
+                cli_printf(cli, "Accel selftest error: otp 0" EOL);
                 result = false;
             } else {
                 float ratio = ((float)selftest_response[i]) / ((float)selftest_otp[i]);
                 if((ratio >= MAX_RATIO) || (ratio <= MIN_RATIO)) {
-                    cli_printf(cli, "ST resp otp ratio" EOL);
+                    cli_printf(cli, "Accel selftest error: otp ratio" EOL);
                     result = false;
                 }
             }
@@ -396,16 +396,16 @@ static bool icm42688_selftest(ICM42688P& imu, bool* gyro_ok, bool* accel_ok, Cli
 
     *gyro_ok = run_gyro_self_test(imu, gyro_raw_bias, cli);
     if(*gyro_ok) {
-        cli_printf(cli, "Gyro Selftest PASS" EOL);
+        cli_printf(cli, "Gyro selftest: PASS" EOL);
     } else {
-        cli_printf(cli, "Gyro Selftest FAIL" EOL);
+        cli_printf(cli, "Gyro selftest: FAIL" EOL);
     }
 
     *accel_ok = run_accel_self_test(imu, accel_raw_bias, cli);
     if(*accel_ok) {
-        cli_printf(cli, "Accel Selftest PASS" EOL);
+        cli_printf(cli, "Accel selftest: PASS" EOL);
     } else {
-        cli_printf(cli, "Accel Selftest FAIL" EOL);
+        cli_printf(cli, "Accel selftest: FAIL" EOL);
     }
 
     cli_printf(
@@ -481,13 +481,7 @@ void cli_imu_test(Cli* cli, std::string& args) {
         .gyro_scale = 0,
     };
 
-    cli_write_str(cli, "Initializing SPI...");
-    cli_write_eol(cli);
-
     spi_init(imu.bus);
-
-    cli_write_str(cli, "SPI initialized");
-    cli_write_eol(cli);
 
     do {
         // Software reset
@@ -498,14 +492,11 @@ void cli_imu_test(Cli* cli, std::string& args) {
         uint8_t reg_value = 0;
         bool read_ok = icm42688p_read_reg(imu.bus, ICM42688_WHO_AM_I, &reg_value);
         if(!read_ok) {
-            cli_printf(cli, "Chip ID read failed" EOL);
+            cli_printf(cli, "Chip ID: read failed" EOL);
             break;
         } else if(reg_value != ICM42688_WHOAMI) {
             cli_printf(
-                cli,
-                "Sensor returned wrong ID 0x%02X, expected 0x%02X" EOL,
-                reg_value,
-                ICM42688_WHOAMI);
+                cli, "Chip ID: wrong ID 0x%02X, expected 0x%02X" EOL, reg_value, ICM42688_WHOAMI);
             break;
         }
 
@@ -536,13 +527,10 @@ void cli_imu_test(Cli* cli, std::string& args) {
 
         bool gyro_ok, accel_ok;
         icm42688_selftest(imu, &gyro_ok, &accel_ok, cli);
-        cli_printf(cli, "Gyro %s" EOL, gyro_ok ? "OK" : "FAIL");
-        cli_printf(cli, "Accel %s" EOL, accel_ok ? "OK" : "FAIL");
+        cli_printf(cli, "Gyro: %s" EOL, gyro_ok ? "OK" : "FAIL");
+        cli_printf(cli, "Accel: %s" EOL, accel_ok ? "OK" : "FAIL");
 
     } while(false);
 
     spi_deinit(imu.bus);
-
-    cli_write_str(cli, "Done");
-    cli_write_eol(cli);
 }
