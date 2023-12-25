@@ -24,6 +24,7 @@
 
 #define EXPANSION_MODULE_TIMEOUT_MS (EXPANSION_PROTOCOL_TIMEOUT_MS - 50UL)
 #define EXPANSION_MODULE_STARTUP_DELAY_MS (250UL)
+#define EXPANSION_MODULE_BUFFER_SIZE (sizeof(ExpansionFrame) + sizeof(ExpansionFrameChecksum))
 
 static StreamBufferHandle_t stream;
 static PB_Main rpc_message;
@@ -57,11 +58,16 @@ static size_t expansion_receive_callback(uint8_t* data, size_t data_size, void* 
 }
 
 static inline bool expansion_receive_frame(ExpansionFrame* frame) {
-    return expansion_frame_decode(frame, expansion_receive_callback, NULL);
+    return expansion_protocol_decode(frame, expansion_receive_callback, NULL) ==
+           ExpansionProtocolStatusOk;
 }
 
 static inline bool expansion_is_heartbeat_frame(const ExpansionFrame* frame) {
     return frame->header.type == ExpansionFrameTypeHeartbeat;
+}
+
+static inline bool expansion_is_data_frame(const ExpansionFrame* frame) {
+    return frame->header.type == ExpansionFrameTypeData;
 }
 
 static inline bool expansion_is_success_frame(const ExpansionFrame* frame) {
@@ -78,7 +84,8 @@ static size_t expansion_send_callback(const uint8_t* data, size_t data_size, voi
 }
 
 static inline bool expansion_send_frame(const ExpansionFrame* frame) {
-    return expansion_frame_encode(frame, expansion_send_callback, NULL);
+    return expansion_protocol_encode(frame, expansion_send_callback, NULL) ==
+           ExpansionProtocolStatusOk;
 }
 
 static inline bool expansion_send_heartbeat() {
@@ -138,29 +145,29 @@ static inline bool expansion_rpc_is_read_complete(const ExpansionRpcContext* ctx
     return ctx->frame.content.data.size == ctx->read_size;
 }
 
-// Read the next frame, process heartbeat if necessary
-static inline bool expansion_rpc_read_next_frame(ExpansionRpcContext* ctx) {
-    for(bool heartbeat_pending = false;;) {
-        // If no frame has been received in a while, send a heartbeat
-        if(!expansion_receive_frame(&ctx->frame)) {
-            if(heartbeat_pending || !expansion_send_heartbeat()) {
-                return false;
-            } else {
+// Receive a frame while maintaining idle connection
+static inline bool expansion_receive_frame_rpc_mode(ExpansionFrame* frame) {
+    bool heartbeat_pending = false;
+
+    while(true) {
+        const ExpansionProtocolStatus status = expansion_protocol_decode(frame, expansion_receive_callback, NULL);
+
+        if(status == ExpansionProtocolStatusErrorCommunication) {
+            if(!heartbeat_pending && expansion_send_heartbeat()) {
                 heartbeat_pending = true;
                 continue;
+            } else {
+                return false;
             }
+
+        } else if(status != ExpansionProtocolStatusOk) {
+            return false;
         }
 
-        switch(ctx->frame.header.type) {
-        case ExpansionFrameTypeHeartbeat:
+        if(expansion_is_heartbeat_frame(frame)){
             heartbeat_pending = false;
-            break;
-        case ExpansionFrameTypeData:
-            ctx->read_size = 0;
+        } else {
             return true;
-        default:
-            expansion_send_status(ExpansionFrameErrorUnknown);
-            return false;
         }
     }
 }
@@ -173,7 +180,10 @@ static bool
     while(received_size != data_size) {
         if(expansion_rpc_is_read_complete(ctx)) {
             // Read next frame
-            if(!expansion_rpc_read_next_frame(ctx)) break;
+            if(!expansion_receive_frame_rpc_mode(&ctx->frame)) break;
+            if(!expansion_is_data_frame(&ctx->frame)) break;
+
+            ctx->read_size = 0;
         }
 
         const size_t current_size =
@@ -329,7 +339,7 @@ static void uart_task(void* unused_arg) {
     // startup delay (skip potential module insertion interference)
     vTaskDelay(pdMS_TO_TICKS(EXPANSION_MODULE_STARTUP_DELAY_MS));
     // init stream buffer
-    stream = xStreamBufferCreate(sizeof(ExpansionFrame), 1);
+    stream = xStreamBufferCreate(EXPANSION_MODULE_BUFFER_SIZE, 1);
     assert(stream != NULL);
 
     // init uart 0
