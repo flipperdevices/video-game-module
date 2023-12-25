@@ -150,7 +150,8 @@ static inline bool expansion_receive_frame_rpc_mode(ExpansionFrame* frame) {
     bool heartbeat_pending = false;
 
     while(true) {
-        const ExpansionProtocolStatus status = expansion_protocol_decode(frame, expansion_receive_callback, NULL);
+        const ExpansionProtocolStatus status =
+            expansion_protocol_decode(frame, expansion_receive_callback, NULL);
 
         if(status == ExpansionProtocolStatusErrorCommunication) {
             if(!heartbeat_pending && expansion_send_heartbeat()) {
@@ -164,7 +165,7 @@ static inline bool expansion_receive_frame_rpc_mode(ExpansionFrame* frame) {
             return false;
         }
 
-        if(expansion_is_heartbeat_frame(frame)){
+        if(expansion_is_heartbeat_frame(frame)) {
             heartbeat_pending = false;
         } else {
             return true;
