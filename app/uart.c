@@ -312,10 +312,7 @@ static bool expansion_start_rpc() {
 
 static uint32_t expansion_get_next_command_id() {
     static uint32_t command_id;
-
-    while(++command_id == 0) {
-    }
-
+    while(++command_id == 0) ;
     return command_id;
 }
 
