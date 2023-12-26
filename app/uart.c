@@ -13,6 +13,7 @@
 #include <flipperzero-protobuf/flipper.pb.h>
 
 #include "frame.h"
+#include "bitmaps.h"
 #include "expansion_protocol.h"
 
 #define UART_ID uart0
@@ -254,6 +255,16 @@ static inline bool expansion_is_success_rpc_response(const PB_Main* message) {
            message->which_content == PB_Main_empty_tag;
 }
 
+static inline bool expansion_is_input_rpc_response(const PB_Main* message) {
+    return message->command_status == PB_CommandStatus_OK &&
+           message->which_content == PB_Main_gui_send_input_event_request_tag;
+}
+
+static inline bool expansion_is_screen_frame_rpc_response(const PB_Main* message) {
+    return message->command_status == PB_CommandStatus_OK &&
+           message->which_content == PB_Main_gui_screen_frame_tag;
+}
+
 // Main states
 
 static bool expansion_wait_ready() {
@@ -318,10 +329,70 @@ static bool expansion_start_screen_streaming() {
     return success;
 }
 
+static bool expansion_start_virtual_display() {
+    bool success = false;
+
+    rpc_message.command_id++;
+    rpc_message.command_status = PB_CommandStatus_OK;
+    rpc_message.which_content = PB_Main_gui_start_virtual_display_request_tag;
+    rpc_message.has_next = false;
+
+    PB_Gui_StartVirtualDisplayRequest* request = &rpc_message.content.gui_start_virtual_display_request;
+
+    request->send_input = true;
+    request->has_first_frame = true;
+    request->first_frame.orientation = PB_Gui_ScreenOrientation_HORIZONTAL;
+    request->first_frame.data = malloc(PB_BYTES_ARRAY_T_ALLOCSIZE(FLIPPER_BITMAP_SIZE));
+    request->first_frame.data->size = FLIPPER_BITMAP_SIZE;
+
+    memcpy(request->first_frame.data->bytes, bitmap_splash_screen, FLIPPER_BITMAP_SIZE);
+
+    do {
+        if(!expansion_send_rpc_message(&rpc_message)) break;
+        if(!expansion_receive_rpc_message(&rpc_message)) break;
+        if(!expansion_is_success_rpc_response(&rpc_message)) break;
+        success = true;
+    } while(false);
+
+    pb_release(&PB_Main_msg, &rpc_message);
+    return success;
+}
+
+static bool expansion_stop_virtual_display() {
+    bool success = false;
+
+    rpc_message.command_id++;
+    rpc_message.command_status = PB_CommandStatus_OK;
+    rpc_message.which_content = PB_Main_gui_stop_virtual_display_request_tag;
+    rpc_message.has_next = false;
+
+    do {
+        if(!expansion_send_rpc_message(&rpc_message)) break;
+        if(!expansion_receive_rpc_message(&rpc_message)) break;
+        if(!expansion_is_success_rpc_response(&rpc_message)) break;
+        success = true;
+    } while(false);
+
+    pb_release(&PB_Main_msg, &rpc_message);
+    return success;
+}
+
+static bool expansion_wait_for_input() {
+    bool success = false;
+
+    while(!success) {
+        if(!expansion_receive_rpc_message(&rpc_message)) break;
+        if(!expansion_is_input_rpc_response(&rpc_message)) continue;
+        success = true;
+    }
+
+    return success;
+}
+
 static void expansion_process_screen_streaming() {
     while(true) {
         if(!expansion_receive_rpc_message(&rpc_message)) break;
-        if(rpc_message.which_content != PB_Main_gui_screen_frame_tag) break;
+        if(!expansion_is_screen_frame_rpc_response(&rpc_message)) continue;
 
         // Display frame
         const PB_Gui_ScreenOrientation orientation =
@@ -383,6 +454,12 @@ static void uart_task(void* unused_arg) {
         if(!expansion_start_rpc()) continue;
         // start screen streaming
         if(!expansion_start_screen_streaming()) continue;
+        // start virtual display
+        if(!expansion_start_virtual_display()) continue;
+        // wait for key press
+        if(!expansion_wait_for_input()) continue;
+        // stop virtual display
+        if(!expansion_stop_virtual_display()) continue;
         // process screen frame messages - returns only on error
         expansion_process_screen_streaming();
     }
