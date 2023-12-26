@@ -326,6 +326,9 @@ static bool expansion_start_screen_streaming() {
     } while(false);
 
     pb_release(&PB_Main_msg, &rpc_message);
+
+    vTaskDelay(pdMS_TO_TICKS(25));
+
     return success;
 }
 
@@ -337,7 +340,8 @@ static bool expansion_start_virtual_display() {
     rpc_message.which_content = PB_Main_gui_start_virtual_display_request_tag;
     rpc_message.has_next = false;
 
-    PB_Gui_StartVirtualDisplayRequest* request = &rpc_message.content.gui_start_virtual_display_request;
+    PB_Gui_StartVirtualDisplayRequest* request =
+        &rpc_message.content.gui_start_virtual_display_request;
 
     request->send_input = true;
     request->has_first_frame = true;
@@ -377,34 +381,24 @@ static bool expansion_stop_virtual_display() {
     return success;
 }
 
-static bool expansion_wait_for_input() {
-    bool success = false;
-
-    while(!success) {
-        if(!expansion_receive_rpc_message(&rpc_message)) break;
-        if(!expansion_is_input_rpc_response(&rpc_message)) continue;
-        success = true;
-    }
-
-    return success;
-}
-
 static void expansion_process_screen_streaming() {
     while(true) {
         if(!expansion_receive_rpc_message(&rpc_message)) break;
-        if(!expansion_is_screen_frame_rpc_response(&rpc_message)) continue;
 
-        // Display frame
-        const PB_Gui_ScreenOrientation orientation =
-            rpc_message.content.gui_screen_frame.orientation;
-        const pb_byte_t* data = rpc_message.content.gui_screen_frame.data->bytes;
+        if(expansion_is_input_rpc_response(&rpc_message)) {
+            if(!expansion_stop_virtual_display()) break;
+        } else if(expansion_is_screen_frame_rpc_response(&rpc_message)) {
+            // Display frame
+            const PB_Gui_ScreenOrientation orientation =
+                rpc_message.content.gui_screen_frame.orientation;
+            const pb_byte_t* data = rpc_message.content.gui_screen_frame.data->bytes;
 
-        frame_parse_data(
-            orientation, (const frame_t*)data, pdMS_TO_TICKS(EXPANSION_MODULE_TIMEOUT_MS));
+            frame_parse_data(
+                orientation, (const frame_t*)data, pdMS_TO_TICKS(EXPANSION_MODULE_TIMEOUT_MS));
+        }
+
         pb_release(&PB_Main_msg, &rpc_message);
     }
-
-    pb_release(&PB_Main_msg, &rpc_message);
 }
 
 static void uart_task(void* unused_arg) {
@@ -456,10 +450,6 @@ static void uart_task(void* unused_arg) {
         if(!expansion_start_screen_streaming()) continue;
         // start virtual display
         if(!expansion_start_virtual_display()) continue;
-        // wait for key press
-        if(!expansion_wait_for_input()) continue;
-        // stop virtual display
-        if(!expansion_stop_virtual_display()) continue;
         // process screen frame messages - returns only on error
         expansion_process_screen_streaming();
     }
