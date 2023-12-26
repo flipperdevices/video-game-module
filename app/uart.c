@@ -256,12 +256,12 @@ static inline bool expansion_is_success_rpc_response(const PB_Main* message) {
 }
 
 static inline bool expansion_is_input_rpc_response(const PB_Main* message) {
-    return message->command_status == PB_CommandStatus_OK &&
+    return message->command_id == 0 && message->command_status == PB_CommandStatus_OK &&
            message->which_content == PB_Main_gui_send_input_event_request_tag;
 }
 
 static inline bool expansion_is_screen_frame_rpc_response(const PB_Main* message) {
-    return message->command_status == PB_CommandStatus_OK &&
+    return message->command_id == 0 && message->command_status == PB_CommandStatus_OK &&
            message->which_content == PB_Main_gui_screen_frame_tag;
 }
 
@@ -310,32 +310,19 @@ static bool expansion_start_rpc() {
     return success;
 }
 
-static bool expansion_start_screen_streaming() {
-    bool success = false;
+static uint32_t expansion_get_next_command_id() {
+    static uint32_t command_id;
 
-    rpc_message.command_id++;
-    rpc_message.command_status = PB_CommandStatus_OK;
-    rpc_message.which_content = PB_Main_gui_start_screen_stream_request_tag;
-    rpc_message.has_next = false;
+    while(++command_id == 0) {
+    }
 
-    do {
-        if(!expansion_send_rpc_message(&rpc_message)) break;
-        if(!expansion_receive_rpc_message(&rpc_message)) break;
-        if(!expansion_is_success_rpc_response(&rpc_message)) break;
-        success = true;
-    } while(false);
-
-    pb_release(&PB_Main_msg, &rpc_message);
-
-    vTaskDelay(pdMS_TO_TICKS(25));
-
-    return success;
+    return command_id;
 }
 
 static bool expansion_start_virtual_display() {
     bool success = false;
 
-    rpc_message.command_id++;
+    rpc_message.command_id = expansion_get_next_command_id();
     rpc_message.command_status = PB_CommandStatus_OK;
     rpc_message.which_content = PB_Main_gui_start_virtual_display_request_tag;
     rpc_message.has_next = false;
@@ -362,12 +349,47 @@ static bool expansion_start_virtual_display() {
     return success;
 }
 
+static bool expansion_wait_input() {
+    bool success = false;
+
+    do {
+        if(!expansion_receive_rpc_message(&rpc_message)) break;
+        if(!expansion_is_input_rpc_response(&rpc_message)) break;
+        success = true;
+    } while(false);
+
+    pb_release(&PB_Main_msg, &rpc_message);
+    return success;
+}
+
 static bool expansion_stop_virtual_display() {
     bool success = false;
 
-    rpc_message.command_id++;
+    rpc_message.command_id = expansion_get_next_command_id();
     rpc_message.command_status = PB_CommandStatus_OK;
     rpc_message.which_content = PB_Main_gui_stop_virtual_display_request_tag;
+    rpc_message.has_next = false;
+
+    if(expansion_send_rpc_message(&rpc_message)) {
+        while(!success) {
+            if(!expansion_receive_rpc_message(&rpc_message)) break;
+            if(expansion_is_input_rpc_response(&rpc_message)) continue;
+            if(!expansion_is_success_rpc_response(&rpc_message)) break;
+
+            success = true;
+        }
+    }
+
+    pb_release(&PB_Main_msg, &rpc_message);
+    return success;
+}
+
+static bool expansion_start_screen_streaming() {
+    bool success = false;
+
+    rpc_message.command_id = expansion_get_next_command_id();
+    rpc_message.command_status = PB_CommandStatus_OK;
+    rpc_message.which_content = PB_Main_gui_start_screen_stream_request_tag;
     rpc_message.has_next = false;
 
     do {
@@ -384,18 +406,15 @@ static bool expansion_stop_virtual_display() {
 static void expansion_process_screen_streaming() {
     while(true) {
         if(!expansion_receive_rpc_message(&rpc_message)) break;
+        if(!expansion_is_screen_frame_rpc_response(&rpc_message)) break;
 
-        if(expansion_is_input_rpc_response(&rpc_message)) {
-            if(!expansion_stop_virtual_display()) break;
-        } else if(expansion_is_screen_frame_rpc_response(&rpc_message)) {
-            // Display frame
-            const PB_Gui_ScreenOrientation orientation =
-                rpc_message.content.gui_screen_frame.orientation;
-            const pb_byte_t* data = rpc_message.content.gui_screen_frame.data->bytes;
+        // Display frame
+        const PB_Gui_ScreenOrientation orientation =
+            rpc_message.content.gui_screen_frame.orientation;
+        const pb_byte_t* data = rpc_message.content.gui_screen_frame.data->bytes;
 
-            frame_parse_data(
-                orientation, (const frame_t*)data, pdMS_TO_TICKS(EXPANSION_MODULE_TIMEOUT_MS));
-        }
+        frame_parse_data(
+            orientation, (const frame_t*)data, pdMS_TO_TICKS(EXPANSION_MODULE_TIMEOUT_MS));
 
         pb_release(&PB_Main_msg, &rpc_message);
     }
@@ -446,10 +465,14 @@ static void uart_task(void* unused_arg) {
         if(!expansion_handshake()) continue;
         // start rpc
         if(!expansion_start_rpc()) continue;
-        // start screen streaming
-        if(!expansion_start_screen_streaming()) continue;
         // start virtual display
         if(!expansion_start_virtual_display()) continue;
+        // wait for button press
+        if(!expansion_wait_input()) continue;
+        // stop virtual display
+        if(!expansion_stop_virtual_display()) continue;
+        // start screen streaming
+        if(!expansion_start_screen_streaming()) continue;
         // process screen frame messages - returns only on error
         expansion_process_screen_streaming();
     }
