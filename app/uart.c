@@ -362,11 +362,15 @@ static bool expansion_start_virtual_display() {
 static bool expansion_wait_input() {
     bool success = false;
 
-    do {
+    while(!success) {
         if(!expansion_receive_rpc_message(&rpc_message)) break;
         if(!expansion_is_input_rpc_response(&rpc_message)) break;
-        success = true;
-    } while(false);
+
+        const PB_Gui_SendInputEventRequest* request =
+            &rpc_message.content.gui_send_input_event_request;
+        success = (request->type == PB_Gui_InputType_RELEASE);
+        pb_release(&PB_Main_msg, &rpc_message);
+    };
 
     pb_release(&PB_Main_msg, &rpc_message);
     return success;
