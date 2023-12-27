@@ -9,5 +9,6 @@
 #define FLIPPER_BITMAP_SIZE (FLIPPER_SCREEN_WIDTH * FLIPPER_SCREEN_HEIGHT / 8)
 
 extern const uint8_t bitmap_splash_screen[FLIPPER_BITMAP_SIZE];
+extern const uint8_t bitmap_default_screen[FLIPPER_BITMAP_SIZE];
 
 void bitmap_xbm_to_screen_frame(uint8_t* dst, const uint8_t* src, size_t w, size_t h);
