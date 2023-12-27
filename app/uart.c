@@ -312,7 +312,8 @@ static bool expansion_start_rpc() {
 
 static uint32_t expansion_get_next_command_id() {
     static uint32_t command_id;
-    while(++command_id == 0) ;
+    while(++command_id == 0)
+        ;
     return command_id;
 }
 
@@ -339,6 +340,18 @@ static bool expansion_start_virtual_display() {
         if(!expansion_send_rpc_message(&rpc_message)) break;
         if(!expansion_receive_rpc_message(&rpc_message)) break;
         if(!expansion_is_success_rpc_response(&rpc_message)) break;
+
+        // Show the same picture on display
+        uint8_t* frame_buffer = calloc(FLIPPER_BITMAP_SIZE, sizeof(uint8_t));
+
+        bitmap_xbm_to_screen_frame(
+            frame_buffer, bitmap_splash_screen, FLIPPER_SCREEN_WIDTH, FLIPPER_SCREEN_HEIGHT);
+        frame_parse_data(
+            OrientationHorizontal,
+            (const frame_t*)frame_buffer,
+            pdMS_TO_TICKS(EXPANSION_MODULE_TIMEOUT_MS));
+
+        free(frame_buffer);
         success = true;
     } while(false);
 

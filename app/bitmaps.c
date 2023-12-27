@@ -66,3 +66,19 @@ const uint8_t bitmap_splash_screen[FLIPPER_BITMAP_SIZE] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfe, 0xff, 0xff, 0x3f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfe, 0xff, 0xff, 0x3f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
+
+void bitmap_xbm_to_screen_frame(uint8_t* dst, const uint8_t* src, size_t w, size_t h) {
+    for(size_t y = 0; y < h; ++y) {
+        for(size_t x = 0; x < w; ++x) {
+            const size_t ii = (y * w + x) / 8;
+            const size_t oi = y / 8 * w + x;
+
+            const size_t iz = x % 8;
+            const size_t oz = y % 8;
+
+            if(src[ii] & (1 << iz)) {
+                dst[oi] = dst[oi] | (1 << oz);
+            }
+        }
+    }
+}
