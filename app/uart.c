@@ -385,12 +385,14 @@ static bool expansion_stop_virtual_display() {
     rpc_message.has_next = false;
 
     if(expansion_send_rpc_message(&rpc_message)) {
-        while(!success) {
+        while(true) {
             if(!expansion_receive_rpc_message(&rpc_message)) break;
-            if(expansion_is_input_rpc_response(&rpc_message)) continue;
-            if(!expansion_is_success_rpc_response(&rpc_message)) break;
+            if(!expansion_is_input_rpc_response(&rpc_message)) {
+                success = expansion_is_success_rpc_response(&rpc_message);
+                break;
+            }
 
-            success = true;
+            pb_release(&PB_Main_msg, &rpc_message);
         }
     }
 
@@ -432,6 +434,8 @@ static void expansion_process_screen_streaming() {
 
         pb_release(&PB_Main_msg, &rpc_message);
     }
+
+    pb_release(&PB_Main_msg, &rpc_message);
 }
 
 static void uart_task(void* unused_arg) {
