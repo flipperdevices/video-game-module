@@ -13,6 +13,7 @@
 #include <flipperzero-protobuf/flipper.pb.h>
 
 #include "frame.h"
+#include "bitmaps.h"
 #include "expansion_protocol.h"
 
 #define UART_ID uart0
@@ -254,6 +255,16 @@ static inline bool expansion_is_success_rpc_response(const PB_Main* message) {
            message->which_content == PB_Main_empty_tag;
 }
 
+static inline bool expansion_is_input_rpc_response(const PB_Main* message) {
+    return message->command_id == 0 && message->command_status == PB_CommandStatus_OK &&
+           message->which_content == PB_Main_gui_send_input_event_request_tag;
+}
+
+static inline bool expansion_is_screen_frame_rpc_response(const PB_Main* message) {
+    return message->command_id == 0 && message->command_status == PB_CommandStatus_OK &&
+           message->which_content == PB_Main_gui_screen_frame_tag;
+}
+
 // Main states
 
 static bool expansion_wait_ready() {
@@ -299,10 +310,100 @@ static bool expansion_start_rpc() {
     return success;
 }
 
+static uint32_t expansion_get_next_command_id() {
+    static uint32_t command_id;
+    while(++command_id == 0)
+        ;
+    return command_id;
+}
+
+static bool expansion_start_virtual_display() {
+    bool success = false;
+
+    rpc_message.command_id = expansion_get_next_command_id();
+    rpc_message.command_status = PB_CommandStatus_OK;
+    rpc_message.which_content = PB_Main_gui_start_virtual_display_request_tag;
+    rpc_message.has_next = false;
+
+    PB_Gui_StartVirtualDisplayRequest* request =
+        &rpc_message.content.gui_start_virtual_display_request;
+
+    request->send_input = true;
+    request->has_first_frame = true;
+    request->first_frame.orientation = PB_Gui_ScreenOrientation_HORIZONTAL;
+    request->first_frame.data = malloc(PB_BYTES_ARRAY_T_ALLOCSIZE(FLIPPER_BITMAP_SIZE));
+    request->first_frame.data->size = FLIPPER_BITMAP_SIZE;
+
+    memcpy(request->first_frame.data->bytes, bitmap_splash_screen, FLIPPER_BITMAP_SIZE);
+
+    do {
+        if(!expansion_send_rpc_message(&rpc_message)) break;
+        if(!expansion_receive_rpc_message(&rpc_message)) break;
+        if(!expansion_is_success_rpc_response(&rpc_message)) break;
+
+        // Show the same picture on display
+        uint8_t* frame_buffer = calloc(FLIPPER_BITMAP_SIZE, sizeof(uint8_t));
+
+        bitmap_xbm_to_screen_frame(
+            frame_buffer, bitmap_splash_screen, FLIPPER_SCREEN_WIDTH, FLIPPER_SCREEN_HEIGHT);
+        frame_parse_data(
+            OrientationHorizontal,
+            (const frame_t*)frame_buffer,
+            pdMS_TO_TICKS(EXPANSION_MODULE_TIMEOUT_MS));
+
+        free(frame_buffer);
+        success = true;
+    } while(false);
+
+    pb_release(&PB_Main_msg, &rpc_message);
+    return success;
+}
+
+static bool expansion_wait_input() {
+    bool success = false;
+
+    while(!success) {
+        if(!expansion_receive_rpc_message(&rpc_message)) break;
+        if(!expansion_is_input_rpc_response(&rpc_message)) break;
+
+        const PB_Gui_SendInputEventRequest* request =
+            &rpc_message.content.gui_send_input_event_request;
+        success = (request->type == PB_Gui_InputType_RELEASE);
+        pb_release(&PB_Main_msg, &rpc_message);
+    };
+
+    pb_release(&PB_Main_msg, &rpc_message);
+    return success;
+}
+
+static bool expansion_stop_virtual_display() {
+    bool success = false;
+
+    rpc_message.command_id = expansion_get_next_command_id();
+    rpc_message.command_status = PB_CommandStatus_OK;
+    rpc_message.which_content = PB_Main_gui_stop_virtual_display_request_tag;
+    rpc_message.has_next = false;
+
+    if(expansion_send_rpc_message(&rpc_message)) {
+        while(true) {
+            if(!expansion_receive_rpc_message(&rpc_message)) break;
+            if(!expansion_is_input_rpc_response(&rpc_message)) {
+                success = expansion_is_success_rpc_response(&rpc_message);
+                break;
+            }
+
+            pb_release(&PB_Main_msg, &rpc_message);
+        }
+    }
+
+    pb_release(&PB_Main_msg, &rpc_message);
+    return success;
+}
+
 static bool expansion_start_screen_streaming() {
     bool success = false;
 
-    rpc_message.command_id++;
+    rpc_message.command_id = expansion_get_next_command_id();
     rpc_message.command_status = PB_CommandStatus_OK;
     rpc_message.which_content = PB_Main_gui_start_screen_stream_request_tag;
     rpc_message.has_next = false;
@@ -321,7 +422,7 @@ static bool expansion_start_screen_streaming() {
 static void expansion_process_screen_streaming() {
     while(true) {
         if(!expansion_receive_rpc_message(&rpc_message)) break;
-        if(rpc_message.which_content != PB_Main_gui_screen_frame_tag) break;
+        if(!expansion_is_screen_frame_rpc_response(&rpc_message)) break;
 
         // Display frame
         const PB_Gui_ScreenOrientation orientation =
@@ -330,6 +431,7 @@ static void expansion_process_screen_streaming() {
 
         frame_parse_data(
             orientation, (const frame_t*)data, pdMS_TO_TICKS(EXPANSION_MODULE_TIMEOUT_MS));
+
         pb_release(&PB_Main_msg, &rpc_message);
     }
 
@@ -369,6 +471,9 @@ static void uart_task(void* unused_arg) {
     // enable rx irq
     uart_set_irq_enables(UART_ID, true, false);
 
+    // show splash screen only once per power-up
+    bool splash_screen_shown = false;
+
     while(true) {
         // reset baud rate to initial value
         uart_set_baudrate(UART_ID, UART_INIT_BAUD_RATE);
@@ -381,6 +486,17 @@ static void uart_task(void* unused_arg) {
         if(!expansion_handshake()) continue;
         // start rpc
         if(!expansion_start_rpc()) continue;
+
+        if(!splash_screen_shown) {
+            // start virtual display
+            if(!expansion_start_virtual_display()) continue;
+            // wait for button press
+            if(!expansion_wait_input()) continue;
+            // stop virtual display
+            if(!expansion_stop_virtual_display()) continue;
+
+            splash_screen_shown = true;
+        }
         // start screen streaming
         if(!expansion_start_screen_streaming()) continue;
         // process screen frame messages - returns only on error
