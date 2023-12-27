@@ -471,6 +471,9 @@ static void uart_task(void* unused_arg) {
     // enable rx irq
     uart_set_irq_enables(UART_ID, true, false);
 
+    // show splash screen only once per power-up
+    bool splash_screen_shown = false;
+
     while(true) {
         // reset baud rate to initial value
         uart_set_baudrate(UART_ID, UART_INIT_BAUD_RATE);
@@ -483,12 +486,17 @@ static void uart_task(void* unused_arg) {
         if(!expansion_handshake()) continue;
         // start rpc
         if(!expansion_start_rpc()) continue;
-        // start virtual display
-        if(!expansion_start_virtual_display()) continue;
-        // wait for button press
-        if(!expansion_wait_input()) continue;
-        // stop virtual display
-        if(!expansion_stop_virtual_display()) continue;
+
+        if(!splash_screen_shown) {
+            // start virtual display
+            if(!expansion_start_virtual_display()) continue;
+            // wait for button press
+            if(!expansion_wait_input()) continue;
+            // stop virtual display
+            if(!expansion_stop_virtual_display()) continue;
+
+            splash_screen_shown = true;
+        }
         // start screen streaming
         if(!expansion_start_screen_streaming()) continue;
         // process screen frame messages - returns only on error
