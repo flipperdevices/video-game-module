@@ -10,15 +10,15 @@ file(GLOB APP_SOURCES
 	"imu/*.c*"
 )
 
-add_executable(flipper_dvi
+add_executable(firmware
 	${APP_SOURCES}
 )
 
-target_compile_definitions(flipper_dvi PRIVATE
+target_compile_definitions(firmware PRIVATE
 	DVI_DEFAULT_SERIAL_CONFIG=${DVI_DEFAULT_SERIAL_CONFIG}
 )
 
-target_link_libraries(flipper_dvi
+target_link_libraries(firmware
 	pico_stdlib
 	pico_multicore
 	pico_util
@@ -33,22 +33,22 @@ target_link_libraries(flipper_dvi
 add_definitions(-DPICO_XOSC_STARTUP_DELAY_MULTIPLIER=64)
 
 # create map/bin/hex file etc.
-pico_add_extra_outputs(flipper_dvi)
+pico_add_extra_outputs(firmware)
 
 # disable stdio for uart
-pico_enable_stdio_uart(flipper_dvi 0)
-pico_enable_stdio_usb(flipper_dvi 1)
+pico_enable_stdio_uart(firmware 0)
+pico_enable_stdio_usb(firmware 1)
 
 # uf2 to board via cp
 add_custom_target(flash_uf2
-	COMMAND cp "${CMAKE_CURRENT_BINARY_DIR}/flipper_dvi.uf2" "/Volumes/RPI-RP2/flipper_dvi.uf2"
-	DEPENDS flipper_dvi
+	COMMAND cp "${CMAKE_CURRENT_BINARY_DIR}/firmware.uf2" "/Volumes/RPI-RP2/firmware.uf2"
+	DEPENDS firmware
 )
 
 # flash board via dap-link
 add_custom_target(flash_dap
-	COMMAND openocd -f interface/cmsis-dap.cfg -f target/rp2040.cfg -c "adapter speed 5000" -c "program ${CMAKE_CURRENT_BINARY_DIR}/flipper_dvi.elf verify reset exit"
-	DEPENDS flipper_dvi
+	COMMAND openocd -f interface/cmsis-dap.cfg -f target/rp2040.cfg -c "adapter speed 5000" -c "program ${CMAKE_CURRENT_BINARY_DIR}/firmware.elf verify reset exit"
+	DEPENDS firmware
 )
 
 # Build date

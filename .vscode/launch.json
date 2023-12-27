@@ -7,7 +7,7 @@
         {
             "name": "Attach (DAP)",
             "cwd": "${workspaceFolder}",
-            "executable": "./build/app/flipper_dvi.elf",
+            "executable": "./build/app/firmware.elf",
             "request": "attach",
             "type": "cortex-debug",
             "servertype": "openocd",
