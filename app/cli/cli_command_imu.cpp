@@ -140,10 +140,6 @@ static bool icm42688p_accel_config(
     return icm42688p_write_reg(imu.bus, ICM42688_ACCEL_CONFIG0, reg_value);
 }
 
-float icm42688p_accel_get_full_scale(ICM42688P& imu) {
-    return imu.accel_scale;
-}
-
 static bool icm42688p_gyro_config(
     ICM42688P& imu,
     ICM42688PGyroFullScale full_scale,
@@ -159,13 +155,13 @@ typedef struct {
     int16_t z;
 } __attribute__((packed)) ICM42688PRawData;
 
-bool icm42688p_read_accel_raw(ICM42688P& imu, ICM42688PRawData* data) {
+static bool icm42688p_read_accel_raw(ICM42688P& imu, ICM42688PRawData* data) {
     bool ret = icm42688p_read_mem(
         imu.bus, ICM42688_ACCEL_DATA_X1, (uint8_t*)data, sizeof(ICM42688PRawData));
     return ret;
 }
 
-bool icm42688p_read_gyro_raw(ICM42688P& imu, ICM42688PRawData* data) {
+static bool icm42688p_read_gyro_raw(ICM42688P& imu, ICM42688PRawData* data) {
     bool ret = icm42688p_read_mem(
         imu.bus, ICM42688_GYRO_DATA_X1, (uint8_t*)data, sizeof(ICM42688PRawData));
     return ret;
