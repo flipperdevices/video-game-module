@@ -11,11 +11,14 @@
 #include <task.h>
 #include "frame.h"
 #include "led.h"
+#include "led_state.h"
 #include "uart.h"
 #include "usb.h"
 #include "bitmaps.h"
 
 static void init() {
+    led_init();
+
     sleep_ms(10);
     vreg_set_voltage(frame_get_voltage());
 
@@ -24,18 +27,10 @@ static void init() {
 
     stdio_init_all();
     frame_init();
-    led_init();
     usb_init();
     uart_protocol_init();
-}
 
-static void led_task(void* unused_arg) {
-    while(1) {
-        led_red(true);
-        vTaskDelay(pdMS_TO_TICKS(500));
-        led_red(false);
-        vTaskDelay(pdMS_TO_TICKS(500));
-    }
+    led_red(false);
 }
 
 static void show_defaul_screen() {
@@ -53,12 +48,8 @@ int main() {
 
     show_defaul_screen();
 
-    BaseType_t status;
-
-    TaskHandle_t led_task_handle = NULL;
-    status = xTaskCreate(led_task, "led_task", 128, NULL, 1, &led_task_handle);
-    assert(status == pdPASS);
-    (void)status;
+    // init the led task
+    led_state_init();
 
     vTaskStartScheduler();
 

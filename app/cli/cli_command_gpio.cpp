@@ -16,7 +16,7 @@ static const GPIOItem gpios[] = {
     {.pin = 7, .danger = true}, // accelerometer, int2 pin
     {.pin = 16}, // external gpio header
     {.pin = 17}, // external gpio header
-    {.pin = 21}, // external gpio header
+    {.pin = 21, .is_led = true, .danger = true}, // external gpio header, green led
     {.pin = 22}, // external gpio header
     {.pin = 23}, // external gpio header
     {.pin = 26}, // external gpio header

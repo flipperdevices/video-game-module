@@ -13,6 +13,7 @@
 #include <flipperzero-protobuf/flipper.pb.h>
 
 #include "frame.h"
+#include "led_state.h"
 #include "bitmaps.h"
 #include "expansion_protocol.h"
 
@@ -475,6 +476,9 @@ static void uart_task(void* unused_arg) {
     bool splash_screen_shown = false;
 
     while(true) {
+        // leds: activate waiting state
+        led_state_wait();
+
         // reset baud rate to initial value
         uart_set_baudrate(UART_ID, UART_INIT_BAUD_RATE);
         // announce presence (one pulse high -> low)
@@ -486,6 +490,9 @@ static void uart_task(void* unused_arg) {
         if(!expansion_handshake()) continue;
         // start rpc
         if(!expansion_start_rpc()) continue;
+
+        // leds: activate active state
+        led_state_active();
 
         if(!splash_screen_shown) {
             // start virtual display
