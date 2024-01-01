@@ -9,4 +9,5 @@ void cli_device_info(Cli* cli, std::string& args) {
     cli_printf(cli, "fw_build_date: %s" EOL, FW_BUILD_DATE);
     cli_printf(cli, "fw_git_commit: %s" EOL, FW_GIT_COMMIT);
     cli_printf(cli, "fw_git_branch: %s" EOL, FW_GIT_BRANCH);
+    cli_printf(cli, "fw_git_tag: %s" EOL, FW_GIT_TAG);
 }

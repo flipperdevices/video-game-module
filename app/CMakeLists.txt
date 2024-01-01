@@ -68,14 +68,52 @@ execute_process(
     OUTPUT_VARIABLE FW_GIT_BRANCH
     OUTPUT_STRIP_TRAILING_WHITESPACE)
 
+# Tag
+execute_process(
+	COMMAND git describe --tags --abbrev=0
+	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+	OUTPUT_VARIABLE FW_GIT_TAG
+	OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+if ("${FW_GIT_TAG}" STREQUAL "")
+	set(FW_GIT_TAG "none")
+endif()
+
 set(INFO_FLAGS
     -DFW_BUILD_DATE="${FW_BUILD_DATE}"
     -DFW_GIT_COMMIT="${FW_GIT_COMMIT}"
     -DFW_GIT_BRANCH="${FW_GIT_BRANCH}"
+    -DFW_GIT_TAG="${FW_GIT_TAG}"
 )
 
 message(STATUS "Build date: ${FW_BUILD_DATE}")
 message(STATUS "FW commit: ${FW_GIT_COMMIT}")
 message(STATUS "FW branch: ${FW_GIT_BRANCH}")
+message(STATUS "FW tag: ${FW_GIT_TAG}")
 
 set_property(SOURCE "cli/cli_command_device_info.cpp" APPEND PROPERTY COMPILE_OPTIONS ${INFO_FLAGS})
+
+set(FW_NAME "vgm-fw")
+set(FW_PATH "${CMAKE_SOURCE_DIR}/build/app")
+set(FW_NEW_PATH "${FW_PATH}/${FW_NAME}-${FW_GIT_TAG}")
+set(FW_PATH_UF2 "${FW_NEW_PATH}.uf2")
+set(FW_PATH_ELF "${FW_NEW_PATH}.elf")
+set(FW_PATH_BIN "${FW_NEW_PATH}.bin")
+
+ADD_CUSTOM_COMMAND(TARGET firmware POST_BUILD
+                   COMMAND ${CMAKE_COMMAND} -E copy
+                       	"${FW_PATH}/firmware.uf2"
+                       	${FW_PATH_UF2}
+                   COMMENT "Copying 'firmware.uf2' to '${FW_PATH_UF2}'")
+
+ADD_CUSTOM_COMMAND(TARGET firmware POST_BUILD
+				   COMMAND ${CMAKE_COMMAND} -E copy
+					   	"${FW_PATH}/firmware.elf"
+					   	${FW_PATH_ELF}
+				   COMMENT "Copying 'firmware.elf' to '${FW_PATH_ELF}'")
+
+ADD_CUSTOM_COMMAND(TARGET firmware POST_BUILD
+				   COMMAND ${CMAKE_COMMAND} -E copy
+					   	"${FW_PATH}/firmware.bin"
+					   	${FW_PATH_BIN}
+				   COMMENT "Copying 'firmware.bin' to '${FW_PATH_BIN}'")
