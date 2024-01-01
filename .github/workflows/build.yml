@@ -27,6 +27,9 @@ jobs:
         
     - name: protoc
       uses: arduino/setup-protoc@v2
+
+    - name: pip
+      run: pip install protobuf grpcio-tools
   
     - name: cmake
       run: cd build && cmake -DCMAKE_BUILD_TYPE=Release ..
