@@ -1,4 +1,4 @@
-name: и
+name: build
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
         submodules: false
 
     - name: submodules
-      run: git submodule update --init --recursive --depth 1
+      run: git submodule update --init --recursive --depth 1 --jobs $(nproc)
 
     - name: arm-none-eabi-gcc
       uses: ryanwinter/arm-none-eabi-gcc@master
