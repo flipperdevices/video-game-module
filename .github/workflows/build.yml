@@ -1,0 +1,45 @@
+name: build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: false
+
+    - name: submodules
+      run: git submodule update --init --recursive --depth 1 --jobs $(nproc)
+
+    - name: arm-none-eabi-gcc
+      uses: ryanwinter/arm-none-eabi-gcc@master
+      with:
+        release: '10-2021.10'
+        
+    - name: protoc
+      uses: arduino/setup-protoc@v2
+
+    - name: pip
+      run: pip install protobuf grpcio-tools
+  
+    - name: cmake
+      run: cd build && cmake -DCMAKE_BUILD_TYPE=Release ..
+
+    - name: compile
+      run: cd build && make -j$(nproc)
+
+    - name: upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: vgm-fw
+        path: |
+          build/app/vgm-fw*
