@@ -40,9 +40,6 @@ jobs:
     - name: upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: firmware
+        name: vgm-fw
         path: |
-          build/app/firmware.bin
-          build/app/firmware.elf
-          build/app/firmware.hex
-          build/app/firmware.uf2
+          build/app/vgm-fw*
