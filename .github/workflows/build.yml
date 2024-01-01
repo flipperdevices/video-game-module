@@ -34,5 +34,15 @@ jobs:
     - name: cmake
       run: cd build && cmake -DCMAKE_BUILD_TYPE=Release ..
 
-    - name: make
+    - name: compile
       run: cd build && make -j$(nproc)
+
+    - name: upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: firmware
+        path: |
+          build/app/firmware.bin
+          build/app/firmware.elf
+          build/app/firmware.hex
+          build/app/firmware.uf2
