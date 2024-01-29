@@ -6,6 +6,7 @@ Requirements:
 
 - arm-none-eabi-gcc
 - CMake
+- Protobuf
 
 ## Getting Source Code
 
@@ -16,7 +17,7 @@ Make sure that all git sub-modules was recursively cloned.
 ## Compiling
 
 	# In project folder
-	( cd build && cmake .. )
+	( cd build && cmake .. && make )
 
 Compiled firmware can be found in `app` folder.
 
