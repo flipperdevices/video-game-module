@@ -1,4 +1,5 @@
-# Flipper Video Game Module
+# Flipper Video Game Module (Powered by Raspberry Pi)
+![Flipper Zero Video Game Module Powered by Raspberry Pi](https://cdn.flipper.net/video_game_module_preview_for_github.png)
 
 ## Building
 
