@@ -25,16 +25,24 @@ def parse_args():
         required=True,
         choices=["pull", "tag", "other"],
     )
+    parser.add_argument(
+        "--github_auth_token",
+        default=None,
+        help="Auth token for private repositories",
+    )
     args = parser.parse_args()
     return args
 
 
-def get_commit_json(event):
+def get_commit_json(event, github_auth_token):
     context = ssl._create_unverified_context()
     commit_url = event["pull_request"]["base"]["repo"]["commits_url"].replace(
         "{/sha}", f"/{event['pull_request']['head']['sha']}"
     )
-    with urllib.request.urlopen(commit_url, context=context) as commit_file:
+    req = urllib.request.Request(commit_url)
+    if github_auth_token:
+        req.add_header("Authorization", f"Bearer {github_auth_token}")
+    with urllib.request.urlopen(req, context=context) as commit_file:
         commit_json = json.loads(commit_file.read().decode("utf-8"))
     return commit_json
 
@@ -43,7 +51,7 @@ def get_details(event, args):
     data = {}
     current_time = datetime.datetime.utcnow().date()
     if args.type == "pull":
-        commit_json = get_commit_json(event)
+        commit_json = get_commit_json(event, args.github_auth_token)
         data["commit_comment"] = shlex.quote(commit_json["commit"]["message"])
         data["commit_hash"] = commit_json["sha"]
         ref = event["pull_request"]["head"]["ref"]
