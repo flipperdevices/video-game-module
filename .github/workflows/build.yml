@@ -2,44 +2,83 @@ name: build
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
+    tags:
+      - '*'
   pull_request:
-    branches: [ "main" ]
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-
     steps:
-    - name: checkout
-      uses: actions/checkout@v4
-      with:
-        submodules: false
+      - name: 'Wipe workspace'
+        run: find ./ -mount -maxdepth 1 -exec rm -rf {} \;
 
-    - name: submodules
-      run: git submodule update --init --recursive --depth 1 --jobs $(nproc)
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          ref: ${{ github.event.pull_request.head.sha }}
 
-    - name: arm-none-eabi-gcc
-      uses: ryanwinter/arm-none-eabi-gcc@master
-      with:
-        release: '10-2021.10'
-        
-    - name: protoc
-      uses: arduino/setup-protoc@v2
+      - name: 'Checkout submodules'
+        run: git submodule update --init --recursive --depth 1 --jobs "$(getconf _NPROCESSORS_ONLN)";
 
-    - name: pip
-      run: pip install protobuf grpcio-tools
-  
-    - name: cmake
-      run: cd build && cmake -DCMAKE_BUILD_TYPE=Release ..
+      - name: 'Setup python'
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
 
-    - name: compile
-      run: cd build && make -j$(nproc)
+      - name: 'Get commit details'
+        id: names
+        run: |
+          if [[ ${{ github.event_name }} == 'pull_request' ]]; then
+            TYPE="pull"
+          elif [[ "${{ github.ref }}" == "refs/tags/"* ]]; then
+            TYPE="tag"
+          else
+            TYPE="other"
+          fi
+          python3 scripts/get_env.py "--event_file=${{ github.event_path }}" "--type=$TYPE"
+          echo "event_type=$TYPE" >> $GITHUB_OUTPUT
 
-    - name: upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: vgm-fw
-        path: |
-          build/app/vgm-fw*
+      - name: 'Install arm-none-eabi-gcc'
+        uses: ryanwinter/arm-none-eabi-gcc@master
+        with:
+          release: '10-2021.10'
+
+      - name: 'Install protoc'
+        uses: arduino/setup-protoc@v2
+
+      - name: 'Install python tools'
+        run: python3 -m pip install protobuf grpcio-tools
+
+      - name: 'Build firmware'
+        run: |
+          pushd build;
+          cmake -DCMAKE_BUILD_TYPE=Release ../;
+          make -j"$(getconf _NPROCESSORS_ONLN)";
+          popd;
+
+      - name: 'Make artifacts directory'
+        if: ${{ !github.event.pull_request.head.repo.fork }}
+        run: |
+          rm -rf artifacts;
+          mkdir artifacts;
+
+      - name: 'Move upload files'
+        if: ${{ !github.event.pull_request.head.repo.fork }}
+        run: |
+          mv build/app/firmware.elf artifacts/vgm-rp2040-firmware-${SUFFIX}.elf;
+          mv build/app/firmware.bin artifacts/vgm-rp2040-firmware-${SUFFIX}.bin;
+          mv build/app/firmware.uf2 artifacts/vgm-rp2040-firmware-${SUFFIX}.uf2;
+          mv build/app/firmware.elf.map artifacts/vgm-rp2040-firmware-${SUFFIX}.map;
+
+      - name: 'Upload artifacts to update server'
+        if: ${{ !github.event.pull_request.head.repo.fork }}
+        run: |
+          FILES=$(for CUR in $(ls artifacts/); do echo "-F files=@artifacts/$CUR"; done)
+          curl --fail -L -H "Token: ${{ secrets.INDEXER_TOKEN }}" \
+              -F "branch=${BRANCH_NAME}" \
+              ${FILES[@]} \
+              "${{ secrets.INDEXER_URL }}"/vgm-firmware/uploadfiles;

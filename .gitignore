@@ -40,3 +40,6 @@ build/
 # KDE stuff
 .directory
 .kateproject
+
+CMakeCache.txt
+CMakeFiles/
