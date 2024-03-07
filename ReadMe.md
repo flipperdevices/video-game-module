@@ -13,7 +13,7 @@ Requirements:
 
 	git clone --recursive https://github.com/flipperdevices/video-game-module.git
 
-Make sure that all git sub-modules was recursively cloned.
+Make sure that all git sub-modules were recursively cloned.
 
 ## Compiling
 
