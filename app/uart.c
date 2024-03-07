@@ -268,6 +268,11 @@ static inline bool expansion_is_screen_frame_rpc_response(const PB_Main* message
            message->which_content == PB_Main_gui_screen_frame_tag;
 }
 
+static inline bool expansion_is_system_device_info_rpc_response(const PB_Main* message) {
+    return message->command_status == PB_CommandStatus_OK &&
+           message->which_content == PB_Main_system_device_info_response_tag;
+}
+
 // Main states
 
 static bool expansion_wait_ready() {
@@ -355,6 +360,39 @@ static bool expansion_start_virtual_display() {
             pdMS_TO_TICKS(EXPANSION_MODULE_TIMEOUT_MS));
 
         free(frame_buffer);
+        success = true;
+    } while(false);
+
+    pb_release(&PB_Main_msg, &rpc_message);
+    return success;
+}
+
+static bool expansion_get_rgb_info() {
+    bool success = false;
+
+    rpc_message.command_id = expansion_get_next_command_id();
+    rpc_message.command_status = PB_CommandStatus_OK;
+    rpc_message.which_content = PB_Main_system_device_info_request_tag;
+
+    do {
+        if(!expansion_send_rpc_message(&rpc_message)) break;
+        PB_System_DeviceInfoResponse* response = &rpc_message.content.system_device_info_response;
+        do {
+            if(!expansion_receive_rpc_message(&rpc_message)) break;
+            if(!expansion_is_system_device_info_rpc_response(&rpc_message)) break;
+
+            if(strcmp(response->key, "hardware_rgb_led_0") != 0) continue;
+
+            uint32_t rgb = (uint32_t)strtol(response->value, NULL, 16);
+            uint16_t rgb565 = (uint16_t)((rgb & 0xF80000) >> 8) +
+                              (uint16_t)((rgb & 0x00FC00) >> 5) +
+                              (uint16_t)((rgb & 0x0000F8) >> 3);
+            frame_set_color(rgb565, 0x0000);
+
+        } while(rpc_message.has_next);
+
+        if(rpc_message.has_next) break;
+
         success = true;
     } while(false);
 
@@ -492,6 +530,9 @@ static void uart_task(void* unused_arg) {
         if(!expansion_handshake()) continue;
         // start rpc
         if(!expansion_start_rpc()) continue;
+
+        // get rgb info
+        if(!expansion_get_rgb_info()) continue;
 
         // leds: activate active state
         led_state_active();
