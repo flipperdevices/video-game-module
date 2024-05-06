@@ -21,9 +21,6 @@ jobs:
           submodules: false
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: 'Checkout submodules'
-        run: git submodule update --init --recursive --depth 1 --jobs "$(getconf _NPROCESSORS_ONLN)";
-
       - name: 'Set toolchain envs'
         run: |
           echo "FBT_TOOLCHAIN_PATH=$(pwd)" >> $GITHUB_ENV
@@ -49,10 +46,8 @@ jobs:
               "--github_auth_token=${{ secrets.GITHUB_TOKEN }}";
           echo "event_type=$TYPE" >> $GITHUB_OUTPUT
 
-      - name: 'Install python tools'
-        run: |
-          source scripts/toolchain/fbtenv.sh;
-          python3 -m pip install grpcio-tools;
+      - name: 'Checkout submodules'
+        run: git submodule update --init --recursive --depth 1 --jobs "$(getconf _NPROCESSORS_ONLN)";
 
       - name: 'Build firmware'
         run: |
