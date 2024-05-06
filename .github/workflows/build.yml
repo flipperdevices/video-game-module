@@ -54,11 +54,6 @@ jobs:
               "--github_auth_token=${{ secrets.GITHUB_TOKEN }}";
           echo "event_type=$TYPE" >> $GITHUB_OUTPUT
 
-      - name: 'Install python tools'
-        run: |
-          source scripts/toolchain/fbtenv.sh;
-          python3 -m pip install grpcio-tools;
-
       - name: 'Build firmware'
         run: |
           source scripts/toolchain/fbtenv.sh;
