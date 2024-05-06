@@ -29,6 +29,14 @@ jobs:
         run: |
           source scripts/toolchain/fbtenv.sh
 
+      - name: 'Setup cmake'
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.29.0'
+
+      - name: 'Checkout submodules'
+        run: git submodule update --init --recursive --depth 1 --jobs "$(getconf _NPROCESSORS_ONLN)";
+
       - name: 'Get commit details'
         id: names
         run: |
@@ -45,9 +53,6 @@ jobs:
               "--type=$TYPE" \
               "--github_auth_token=${{ secrets.GITHUB_TOKEN }}";
           echo "event_type=$TYPE" >> $GITHUB_OUTPUT
-
-      - name: 'Checkout submodules'
-        run: git submodule update --init --recursive --depth 1 --jobs "$(getconf _NPROCESSORS_ONLN)";
 
       - name: 'Build firmware'
         run: |
