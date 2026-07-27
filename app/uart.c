@@ -430,7 +430,9 @@ static void expansion_process_screen_streaming() {
         // Display frame
         const PB_Gui_ScreenOrientation orientation =
             rpc_message.content.gui_screen_frame.orientation;
-        const pb_byte_t* data = rpc_message.content.gui_screen_frame.data->bytes;
+        const pb_bytes_array_t* frame_data = rpc_message.content.gui_screen_frame.data;
+        if(!frame_data || frame_data->size != sizeof(frame_t)) break;
+        const pb_byte_t* data = frame_data->bytes;
 
         frame_parse_data(
             orientation, (const frame_t*)data, pdMS_TO_TICKS(EXPANSION_MODULE_TIMEOUT_MS));
