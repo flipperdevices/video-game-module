@@ -217,7 +217,11 @@ static inline size_t
         break;
     case ExpansionFrameTypeData:
         if(received_content_size < sizeof(frame->content.data.size)) {
+            // Data size is unknown as of now
             content_size = sizeof(frame->content.data.size);
+        } else if(frame->content.data.size > sizeof(frame->content.data.bytes)) {
+            // Malformed frame or garbage input
+            return SIZE_MAX;
         } else {
             content_size = sizeof(frame->content.data.size) + frame->content.data.size;
         }
